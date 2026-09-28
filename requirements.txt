@@ -4,5 +4,9 @@ numpy
 qrcode>=7.4
 tqdm
 pytest
+# --- Phase 2: OCR benchmark ---
+rapidfuzz
+matplotlib
+# easyocr and paddleocr are installed by scripts/setup_ocr.sh / the notebook (GPU)
 # --- later phases (added when we get there) ---
-# paddleocr, gliner, ultralytics, transformers, datasets, onnxruntime, wandb, huggingface_hub
+# gliner, ultralytics, transformers, datasets, onnxruntime, wandb, huggingface_hub
