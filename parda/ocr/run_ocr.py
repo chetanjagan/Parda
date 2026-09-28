@@ -66,31 +66,50 @@ def find_data(data=None, verbose=True):
     return best
 
 
-def load_sample(data, per_lang, seed, out):
+def _read_meta(data):
+    meta = []
+    with open(os.path.join(data, "annotations.jsonl"), encoding="utf-8") as f:
+        for line in f:
+            r = json.loads(line)
+            meta.append((r["id"], r["lang"], r["doc_type"]))
+    return meta
+
+
+def pick_ids(meta, per_lang, seed, exclude=frozenset()):
+    """per_lang pages per language, round-robin over doc types. Deterministic for a given seed."""
+    rng = random.Random(seed)
+    ids = set()
+    for lang in sorted({m[1] for m in meta}):
+        pool = [m for m in meta if m[1] == lang]
+        rng.shuffle(pool)
+        by_doc = {}
+        for m in pool:
+            if m[0] not in exclude:
+                by_doc.setdefault(m[2], []).append(m[0])
+        picked, docs = [], sorted(by_doc)
+        while len(picked) < per_lang and any(by_doc.values()):
+            for d in docs:
+                if by_doc[d] and len(picked) < per_lang:
+                    picked.append(by_doc[d].pop())
+        ids.update(picked)
+    return ids
+
+
+# the Phase 2 benchmark sample (keep fixed forever; env override exists only for tests)
+BENCH_PER_LANG, BENCH_SEED = int(os.environ.get("PARDA_BENCH_PER_LANG", 100)), 7
+
+
+def benchmark_ids(data):
+    return pick_ids(_read_meta(data), BENCH_PER_LANG, BENCH_SEED)
+
+
+def load_sample(data, per_lang, seed, out, exclude=frozenset()):
     """Pick per_lang pages per language (spread over doc types). Saved so all engines share it."""
     path = os.path.join(out, "sample_ids.json")
     if os.path.exists(path):
         ids = set(json.load(open(path)))
     else:
-        meta = []
-        with open(os.path.join(data, "annotations.jsonl"), encoding="utf-8") as f:
-            for line in f:
-                r = json.loads(line)
-                meta.append((r["id"], r["lang"], r["doc_type"]))
-        rng = random.Random(seed)
-        ids = set()
-        for lang in sorted({m[1] for m in meta}):
-            pool = [m for m in meta if m[1] == lang]
-            rng.shuffle(pool)
-            by_doc = {}
-            for m in pool:  # round-robin over doc types so each language covers all templates
-                by_doc.setdefault(m[2], []).append(m[0])
-            picked, docs = [], sorted(by_doc)
-            while len(picked) < per_lang and any(by_doc.values()):
-                for d in docs:
-                    if by_doc[d] and len(picked) < per_lang:
-                        picked.append(by_doc[d].pop())
-            ids.update(picked)
+        ids = pick_ids(_read_meta(data), per_lang, seed, exclude)
         os.makedirs(out, exist_ok=True)
         json.dump(sorted(ids), open(path, "w"))
     recs = []
@@ -132,11 +151,16 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--workers", type=int, default=1, help="parallel processes (CPU engines only)")
     ap.add_argument("--noise", type=float, default=0.0, help="oracle only")
+    ap.add_argument("--exclude_benchmark", action="store_true",
+                    help="never pick the 300 Phase 2 benchmark pages (use for TRAINING data)")
     a = ap.parse_args(argv)
 
     data = find_data(a.data)
     os.makedirs(a.out, exist_ok=True)
-    recs = load_sample(data, a.per_lang, a.seed, a.out)
+    exclude = benchmark_ids(data) if a.exclude_benchmark else frozenset()
+    recs = load_sample(data, a.per_lang, a.seed, a.out, exclude)
+    if exclude:
+        assert not ({r["id"] for r in recs} & exclude), "benchmark pages leaked into training sample"
     out_path = os.path.join(a.out, f"ocr_{a.engine}.jsonl")
     done = set()
     if os.path.exists(out_path):

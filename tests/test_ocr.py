@@ -15,8 +15,9 @@ from parda.synth.canvas import available_scripts  # noqa: E402
 TMP = tempfile.mkdtemp(prefix="parda_ocr_test_")
 
 
-def _py(*args):
-    subprocess.run([sys.executable, "-m", *args], cwd=ROOT, check=True, capture_output=True, text=True)
+def _py(*args, env=None):
+    subprocess.run([sys.executable, "-m", *args], cwd=ROOT, check=True, capture_output=True, text=True,
+                   env=dict(os.environ, **(env or {})))
 
 
 def _data():
@@ -111,6 +112,22 @@ def test_find_data_zip_and_duplicates():
 
     # case 3: explicit --data wins
     assert R.find_data(src, verbose=False) == src
+
+
+def test_training_sample_excludes_benchmark():
+    import parda.ocr.run_ocr as R
+    d = _data()
+    meta = R._read_meta(d)
+    bench = R.pick_ids(meta, 3, 7)
+    assert bench == R.pick_ids(meta, 3, 7)  # deterministic
+    train = R.pick_ids(meta, 100, 42, exclude=bench)
+    assert train and not (train & bench)
+    assert len(train) + len(bench) == len(meta)  # tiny dataset: everything else goes to training
+    out = os.path.join(TMP, "train_sample")
+    _py("parda.ocr.run_ocr", "--engine", "oracle", "--data", d, "--out", out, "--per_lang", "4",
+        "--seed", "42", "--exclude_benchmark", env={"PARDA_BENCH_PER_LANG": "3"})
+    ids = set(json.load(open(os.path.join(out, "sample_ids.json"))))
+    assert ids and not (ids & R.pick_ids(meta, 3, 7))
 
 
 def test_tesseract_end_to_end():
