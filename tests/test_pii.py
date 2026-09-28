@@ -20,6 +20,12 @@ from parda.pii.spans import (build_ocr_text, char_spans_to_token_ner, chunk_exam
 from parda.synth import ids  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="parda_pii_test_")
+
+
+def _n_langs():
+    # the generator drops hi-en when no Devanagari font is installed (e.g. an OCR/GPU-only Kaggle session)
+    from parda.synth.canvas import available_scripts
+    return 2 if available_scripts()["deva"] else 1
 ENV = {"PARDA_BENCH_PER_LANG": "3"}  # tiny benchmark for the tiny test dataset
 
 
@@ -207,7 +213,7 @@ def test_evaluator_gold_and_empty():
     assert 0 < r["fully_redacted"] < 1.0, r          # rules can't find names/addresses
     assert rep["rules + gold"]["overall"]["fully_redacted"] == 1.0
     assert rep["rules"]["by_label"]["PERSON_NAME"]["fully_redacted"] == 0.0
-    assert rep["_meta"]["pages"] == 6                 # only the (tiny) benchmark pages
+    assert rep["_meta"]["pages"] == 3 * _n_langs()   # only the (tiny) benchmark pages
     assert "Fully redacted" in md
 
 
@@ -225,18 +231,115 @@ def test_build_data_and_dry_run():
     st = json.load(open(os.path.join(out, "stats.json")))
     tr = json.load(open(os.path.join(out, "train.json")))
     va = json.load(open(os.path.join(out, "val.json")))
-    assert st["benchmark_pages_excluded"] == 6
-    assert st["docs"]["noisy_docs"] == 24 and st["docs"]["clean_docs"] == 10, st   # 30 docs - 6 benchmark
+    nb = 3 * _n_langs()
+    assert st["benchmark_pages_excluded"] == nb
+    assert st["docs"]["noisy_docs"] == 30 - nb and st["docs"]["clean_docs"] == 10, st   # 30 docs - benchmark
     assert tr and va and {e["source"] for e in tr} == {"clean", "noisy"}
     import parda.ocr.run_ocr as R
     bench = R.pick_ids(R._read_meta(d), 3, 7)
-    assert len(bench) == 6
+    assert len(bench) == nb
     # every entity token span is valid and uses a known label
     for ex in tr + va:
         for s, e, lab in ex["ner"]:
             assert 0 <= s <= e < len(ex["tokenized_text"]) and lab in LABELS.values()
     out_txt = _py("parda.pii.train_gliner", "--data_dir", out, "--dry_run")
     assert '"entities"' in out_txt
+
+
+# ---------------------------------------------------------------- training glue vs fake GLiNER APIs
+_FAKE_COMMON = """
+import os, types
+class _State:
+    def __init__(self): self.global_step = 0; self.log_history = []
+class _Trainerish:
+    def __init__(self, callbacks=()):
+        self.state = _State(); self.callbacks = list(callbacks or [])
+    def run(self, steps=3):
+        control = types.SimpleNamespace(should_save=False, should_training_stop=False)
+        for i in range(steps):
+            self.state.global_step += 1
+            self.state.log_history.append({"loss": 1.0 / (i + 1)})
+            for cb in self.callbacks:
+                cb.on_step_end(None, self.state, control)
+        self.state.log_history.append({"eval_loss": 0.5})
+        return self
+class GLiNER:
+    def __init__(self):
+        self.config = object()
+        self.data_processor = types.SimpleNamespace(transformer_tokenizer="tok")
+    @classmethod
+    def from_pretrained(cls, p): return cls()
+    def to(self, d): return self
+    def save_pretrained(self, path):
+        os.makedirs(path, exist_ok=True); open(os.path.join(path, "saved"), "w").write("1")
+    def predict_entities(self, text, labels, threshold=0.5):
+        return [{"label": "pan number", "text": "ABCPK1234F", "score": 0.9, "start": 0, "end": 1}]
+"""
+
+_FAKE_NEW = _FAKE_COMMON + """
+__version__ = "9.9-new"
+def _train_model(self, train_dataset, eval_dataset, output_dir, **kw):
+    if "callbacks" in kw: raise TypeError("TrainingArguments got an unexpected keyword argument 'callbacks'")
+    if "eval_strategy" in kw: raise TypeError("unexpected keyword argument 'eval_strategy'")
+    assert "evaluation_strategy" in kw and train_dataset and eval_dataset
+    return _Trainerish().run()
+GLiNER.train_model = _train_model
+"""
+
+_FAKE_OLD_TRAINING = """
+from gliner import _Trainerish
+class TrainingArguments:
+    def __init__(self, **kw): self.kw = kw
+class Trainer(_Trainerish):
+    def __init__(self, model, args, train_dataset, eval_dataset, data_collator, callbacks=(), tokenizer=None):
+        assert tokenizer == "tok" and data_collator.ok
+        super().__init__(callbacks)
+    def train(self, resume_from_checkpoint=None): return self.run(4)
+"""
+_FAKE_OLD_COLLATOR = """
+class BaseDataCollator: pass
+class DataCollator:
+    def __init__(self, config, data_processor=None, prepare_labels=False):
+        self.ok = prepare_labels and data_processor is not None
+"""
+
+
+def _make_fakes(root, kind):
+    os.makedirs(os.path.join(root, "gliner", "data_processing"), exist_ok=True)
+    os.makedirs(os.path.join(root, "torch"), exist_ok=True)
+    os.makedirs(os.path.join(root, "transformers"), exist_ok=True)
+    open(os.path.join(root, "torch", "__init__.py"), "w").write(
+        "class cuda:\n    @staticmethod\n    def is_available(): return False\n")
+    open(os.path.join(root, "transformers", "__init__.py"), "w").write(
+        "class TrainerCallback:\n    pass\n")
+    open(os.path.join(root, "gliner", "data_processing", "__init__.py"), "w").write("")
+    if kind == "new":
+        open(os.path.join(root, "gliner", "__init__.py"), "w").write(_FAKE_NEW)
+        open(os.path.join(root, "gliner", "data_processing", "collator.py"), "w").write(
+            "class BaseDataCollator: pass\n")
+    else:
+        open(os.path.join(root, "gliner", "__init__.py"), "w").write(_FAKE_COMMON + '__version__ = "0.1-old"\n')
+        open(os.path.join(root, "gliner", "training.py"), "w").write(_FAKE_OLD_TRAINING)
+        open(os.path.join(root, "gliner", "data_processing", "collator.py"), "w").write(_FAKE_OLD_COLLATOR)
+
+
+def test_train_glue_old_and_new_gliner_api():
+    data_dir = os.path.join(TMP, "gliner_data")
+    if not os.path.exists(os.path.join(data_dir, "train.json")):
+        test_build_data_and_dry_run()
+    for kind, strategy in (("new", "model.train_model"), ("old", "Trainer+DataCollator")):
+        fake_root = os.path.join(TMP, f"fake_{kind}")
+        _make_fakes(fake_root, kind)
+        out = os.path.join(TMP, f"train_{kind}")
+        r = subprocess.run([sys.executable, "-m", "parda.pii.train_gliner", "--data_dir", data_dir, "--out", out,
+                            "--smoke"], cwd=ROOT, capture_output=True, text=True,
+                           env=dict(os.environ, PYTHONPATH=fake_root + os.pathsep + ROOT))
+        assert r.returncode == 0, (kind, r.stdout[-1500:], r.stderr[-2500:])
+        summ = json.load(open(os.path.join(out, "train_summary.json")))
+        assert summ["strategy"] == strategy, summ
+        assert summ["steps"] >= 3 and summ["last_loss"] < summ["first_loss"], summ
+        assert os.path.exists(os.path.join(out, "final", "saved"))
+        assert "pan number" in r.stdout  # sanity prediction printed
 
 
 if __name__ == "__main__":

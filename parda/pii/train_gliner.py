@@ -48,11 +48,84 @@ def strip(exs):
     return [{"tokenized_text": e["tokenized_text"], "ner": [list(x) for x in e["ner"]]} for e in exs]
 
 
+def _filtered(fn, kw):
+    """Keep only kwargs `fn` accepts (unless it takes **kwargs)."""
+    import inspect
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return kw
+    if any(p.kind == p.VAR_KEYWORD for p in params.values()):
+        return kw
+    return {k: v for k, v in kw.items() if k in params}
+
+
+def gliner_api_report():
+    """Describe the installed GLiNER training API (printed before training, useful for debugging)."""
+    import gliner
+    from gliner import GLiNER
+    info = {"version": getattr(gliner, "__version__", "?"), "has_train_model": hasattr(GLiNER, "train_model")}
+    try:
+        import gliner.data_processing.collator as C
+        info["collators"] = sorted(n for n in dir(C) if n.endswith("Collator"))
+    except Exception as e:  # noqa: BLE001
+        info["collators"] = f"n/a ({e})"
+    try:
+        import gliner.training as T
+        info["training_module"] = sorted(n for n in ("Trainer", "TrainingArguments") if hasattr(T, n))
+    except Exception as e:  # noqa: BLE001
+        info["training_module"] = f"n/a ({e})"
+    return info
+
+
+def _pick_collator(model):
+    import gliner.data_processing.collator as C
+    names = ["DataCollator", "SpanDataCollator"] + sorted(
+        n for n in dir(C) if n.endswith("DataCollator") and n != "BaseDataCollator"
+        and not any(x in n for x in ("Relation", "Token", "Decoder", "BiEncoder")))
+    for n in names:
+        cls = getattr(C, n, None)
+        if cls is None:
+            continue
+        for args, kw in (((model.config,), {"data_processor": model.data_processor, "prepare_labels": True}),
+                         ((), {"config": model.config, "data_processor": model.data_processor, "prepare_labels": True})):
+            try:
+                return n, cls(*args, **_filtered(cls, kw))
+            except TypeError:
+                continue
+    raise ImportError(f"no usable GLiNER data collator found in {C.__name__}: {dir(C)}")
+
+
+def _training_args_kw(a, use_fp16):
+    kw = dict(
+        output_dir=os.path.join(a.out, "checkpoints"), learning_rate=a.lr, weight_decay=0.01,
+        others_lr=a.others_lr, others_weight_decay=0.01, lr_scheduler_type="linear", warmup_ratio=0.1,
+        per_device_train_batch_size=a.bs, per_device_eval_batch_size=a.bs, focal_loss_alpha=0.75,
+        focal_loss_gamma=2, num_train_epochs=a.epochs, max_steps=a.max_steps if a.max_steps > 0 else -1,
+        save_strategy="steps", save_steps=a.save_steps, save_total_limit=2, eval_steps=a.save_steps,
+        logging_steps=a.log_steps, dataloader_num_workers=0, fp16=use_fp16,
+        report_to=["wandb"] if a.wandb else "none", eval_strategy="steps",
+    )
+    if a.wandb:
+        kw["run_name"] = os.path.basename(a.out.rstrip("/"))
+    return kw
+
+
+def _retry_eval_strategy(fn, kw):
+    """transformers renamed evaluation_strategy -> eval_strategy; try both."""
+    try:
+        return fn(**kw)
+    except TypeError as e:
+        if "eval_strategy" not in str(e):
+            raise
+        kw = dict(kw)
+        kw["evaluation_strategy"] = kw.pop("eval_strategy")
+        return fn(**kw)
+
+
 def train(a, tr, va):
     import torch
     from gliner import GLiNER
-    from gliner.data_processing.collator import DataCollator
-    from gliner.training import Trainer, TrainingArguments
     from transformers import TrainerCallback
 
     class TimeGuard(TrainerCallback):
@@ -66,59 +139,71 @@ def train(a, tr, va):
                 control.should_training_stop = True
             return control
 
+    print("GLiNER API:", json.dumps(gliner_api_report()), flush=True)
     print("loading base model:", a.base, flush=True)
     model = GLiNER.from_pretrained(a.base)
-    collator = DataCollator(model.config, data_processor=model.data_processor, prepare_labels=True)
     use_fp16 = torch.cuda.is_available() and not a.no_fp16
     steps_per_epoch = math.ceil(len(tr) / a.bs)
-    kw = dict(
-        output_dir=os.path.join(a.out, "checkpoints"), learning_rate=a.lr, weight_decay=0.01,
-        others_lr=a.others_lr, others_weight_decay=0.01, lr_scheduler_type="linear", warmup_ratio=0.1,
-        per_device_train_batch_size=a.bs, per_device_eval_batch_size=a.bs, focal_loss_alpha=0.75,
-        focal_loss_gamma=2, num_train_epochs=a.epochs, max_steps=a.max_steps if a.max_steps > 0 else -1,
-        save_strategy="steps", save_steps=a.save_steps, save_total_limit=2, eval_steps=a.save_steps,
-        logging_steps=a.log_steps, dataloader_num_workers=0, fp16=use_fp16,
-        report_to=["wandb"] if a.wandb else "none", eval_strategy="steps",
-    )
-    if a.wandb:
-        kw["run_name"] = os.path.basename(a.out.rstrip("/"))
-    try:
-        targs = TrainingArguments(**kw)
-    except TypeError:  # older transformers name
-        kw["evaluation_strategy"] = kw.pop("eval_strategy")
-        targs = TrainingArguments(**kw)
-    base_kw = dict(model=model, args=targs, train_dataset=tr, eval_dataset=va, data_collator=collator,
-                   callbacks=[TimeGuard(a.max_hours)])
-    tok = model.data_processor.transformer_tokenizer
-    trainer = None
-    for key in ("processing_class", "tokenizer"):  # newer / older transformers
-        try:
-            trainer = Trainer(**base_kw, **{key: tok})
-            break
-        except TypeError:
-            continue
-    if trainer is None:
-        trainer = Trainer(**base_kw)
-
+    kw = _training_args_kw(a, use_fp16)
+    guard = TimeGuard(a.max_hours)
     print(f"train={len(tr)} val={len(va)} batch={a.bs} steps/epoch={steps_per_epoch} fp16={use_fp16}", flush=True)
-    last = None
-    ck = os.path.join(a.out, "checkpoints")
-    if a.resume and os.path.isdir(ck):
-        cks = sorted((d for d in os.listdir(ck) if d.startswith("checkpoint-")), key=lambda d: int(d.split("-")[1]))
-        last = os.path.join(ck, cks[-1]) if cks else None
-        print("resuming from", last)
+
+    trainer, strategy = None, None
     t0 = time.time()
-    result = trainer.train(resume_from_checkpoint=last)
+    if hasattr(model, "train_model"):
+        # --- strategy B: newer gliner's built-in model.train_model(...) (preferred when available) ---
+        strategy = "model.train_model"
+        print("training strategy:", strategy, flush=True)
+        call = dict(kw, train_dataset=tr, eval_dataset=va, callbacks=[guard])
+        if "callbacks" not in _filtered(model.train_model, call):
+            print("note: train_model() takes no callbacks -> time guard inactive; cap with --max_steps", flush=True)
+
+        def run(**k):
+            return model.train_model(**_filtered(model.train_model, k))
+        try:
+            out = _retry_eval_strategy(run, call)
+        except TypeError as e:
+            if "callbacks" not in str(e):
+                raise
+            call.pop("callbacks")
+            print("note: callbacks not supported -> time guard inactive; cap with --max_steps", flush=True)
+            out = _retry_eval_strategy(run, call)
+        trainer = out if hasattr(out, "state") else getattr(model, "trainer", None)
+    else:
+        # --- strategy A: classic GLiNER Trainer + data collator (older gliner) ---
+        from gliner.training import Trainer, TrainingArguments
+        cname, collator = _pick_collator(model)
+        strategy = f"Trainer+{cname}"
+        targs = _retry_eval_strategy(TrainingArguments, kw)
+        base_kw = dict(model=model, args=targs, train_dataset=tr, eval_dataset=va, data_collator=collator,
+                       callbacks=[guard])
+        tok = getattr(model.data_processor, "transformer_tokenizer", None)
+        for extra in ({"processing_class": tok}, {"tokenizer": tok}, {}):
+            try:
+                trainer = Trainer(**base_kw, **extra)
+                break
+            except TypeError:
+                continue
+        last = None
+        ck = kw["output_dir"]
+        if a.resume and os.path.isdir(ck):
+            cks = sorted((d for d in os.listdir(ck) if d.startswith("checkpoint-")), key=lambda d: int(d.split("-")[1]))
+            last = os.path.join(ck, cks[-1]) if cks else None
+            print("resuming from", last)
+        print("training strategy:", strategy, flush=True)
+        trainer.train(resume_from_checkpoint=last)
+
     dt = time.time() - t0
-    steps = max(1, result.global_step)
+    history = trainer.state.log_history if trainer is not None and hasattr(trainer, "state") else []
+    steps = max(1, trainer.state.global_step if trainer is not None and hasattr(trainer, "state") else 1)
     print(f"trained {steps} steps in {dt / 60:.1f} min ({dt / steps:.2f} s/step)", flush=True)
-    losses = [h["loss"] for h in trainer.state.log_history if "loss" in h]
-    evals = [h["eval_loss"] for h in trainer.state.log_history if "eval_loss" in h]
+    losses = [h["loss"] for h in history if "loss" in h]
+    evals = [h["eval_loss"] for h in history if "eval_loss" in h]
     if losses and any(x != x for x in losses):
         print("WARNING: NaN loss seen. Re-run with --no_fp16", flush=True)
     final = os.path.join(a.out, "final")
     model.save_pretrained(final)
-    summary = {"steps": steps, "minutes": round(dt / 60, 1), "sec_per_step": round(dt / steps, 3),
+    summary = {"strategy": strategy, "steps": steps, "minutes": round(dt / 60, 1), "sec_per_step": round(dt / steps, 3),
                "first_loss": losses[0] if losses else None, "last_loss": losses[-1] if losses else None,
                "eval_losses": evals, "base": a.base, "train_examples": len(tr), "fp16": use_fp16}
     json.dump(summary, open(os.path.join(a.out, "train_summary.json"), "w"), indent=2)
