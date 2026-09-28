@@ -8,5 +8,7 @@ pytest
 rapidfuzz
 matplotlib
 # easyocr and paddleocr are installed by scripts/setup_ocr.sh / the notebook (GPU)
-# --- later phases (added when we get there) ---
-# gliner, ultralytics, transformers, datasets, onnxruntime, wandb, huggingface_hub
+# --- Phase 3: PII model (GPU, installed in the notebook) ---
+# gliner
+# --- later phases ---
+# ultralytics, transformers, datasets, onnxruntime, wandb, huggingface_hub
