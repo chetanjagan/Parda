@@ -1,0 +1,8 @@
+# --- Phase 1: synthetic data generator (CPU) ---
+pillow>=10.0
+numpy
+qrcode>=7.4
+tqdm
+pytest
+# --- later phases (added when we get there) ---
+# paddleocr, gliner, ultralytics, transformers, datasets, onnxruntime, wandb, huggingface_hub
