@@ -9,12 +9,22 @@ except ImportError:
     HAS_RAPIDFUZZ = False
 
 _ZW = dict.fromkeys(map(ord, "\u200b\u200c\u200d\ufeff"), None)  # zero-width chars OCR often adds/drops
+# Indic digits -> ASCII. EasyOCR's Hindi model writes '6322' as '६३२२' (same number, different glyphs).
+for _base in (0x0966, 0x09E6, 0x0BE6, 0x0C66, 0x0CE6):  # Devanagari, Bengali, Tamil, Telugu, Kannada
+    for _i in range(10):
+        _ZW[_base + _i] = str(_i)
 
 
 def norm(s: str) -> str:
-    """NFC + remove zero-width chars + collapse whitespace."""
+    """NFC + remove zero-width chars + Indic digits to ASCII + collapse whitespace."""
     s = unicodedata.normalize("NFC", s or "").translate(_ZW)
     return re.sub(r"\s+", " ", s).strip()
+
+
+def loose(s: str) -> str:
+    """Letters, combining marks (Hindi/Kannada vowel signs) and digits only, casefolded.
+    Drops punctuation, symbols and spaces: '#173, 1st Main Rd,' -> '1731stmainrd'."""
+    return "".join(c for c in norm(s) if unicodedata.category(c)[0] in "LMN").casefold()
 
 
 def squash(s: str) -> str:

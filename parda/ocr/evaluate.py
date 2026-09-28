@@ -7,8 +7,10 @@ Metrics (per engine, and split by language / script / entity type / document typ
   word_recall         % of ground-truth words found anywhere on the page (order-free)
   word_exact          % of words read exactly at the right place (split by script: latin/deva/knda)
   pii_exact           % of PII entities whose text OCR reproduced exactly at the right place
+  pii_found           same, ignoring punctuation/spaces/case (what redaction needs: FIND the item)
   pii_near            same, allowing <=10% character errors
   pii_missed          % of PII entities where OCR detected no text at all
+  best-of-both        an entity counts as found if ANY engine found it (upper bound for combining engines)
   sec_per_page        speed
 The PII numbers matter most: redaction can only hide what OCR can read.
 """
@@ -22,7 +24,7 @@ from statistics import median
 
 from ..synth.canvas import script_of
 from .run_ocr import find_data, load_sample
-from .textnorm import cer, is_punct, norm, squash, substring_distance
+from .textnorm import cer, is_punct, loose, norm, squash, substring_distance
 
 
 def _area(b):
@@ -97,20 +99,24 @@ def score_page(rec, segs):
                and not is_punct(w["text"])]
         if not ews:
             continue
-        dist, total, seen, any_hit = 0, 0, [], False
+        dist, total, dist_loose, seen, any_hit = 0, 0, 0, [], False
         for w in ews:
             hits = overlapping(w["bbox"], segs, 0.5)
             any_hit |= bool(hits)
             for h in hits:
                 if h not in seen:
                     seen.append(h)
+            hay_text = " ".join(h["text"] for h in hits)
             needle = squash(w["text"]).casefold()
-            dist += substring_distance(needle, squash(" ".join(h["text"] for h in hits)).casefold())
+            dist += substring_distance(needle, squash(hay_text).casefold())
             total += len(needle)
+            nl = loose(w["text"])
+            if nl:
+                dist_loose += substring_distance(nl, loose(hay_text))
         c = min(1.0, dist / max(1, total))
-        ents.append({"label": e["label"], "script": script_of(e["text"]), "exact": dist == 0, "near": c <= 0.10,
-                     "missed": not any_hit, "cer": c, "gt": e["text"],
-                     "ocr": " | ".join(h["text"] for h in seen)})
+        ents.append({"k": len(ents), "label": e["label"], "script": script_of(e["text"]), "exact": dist == 0,
+                     "found": dist_loose == 0, "near": c <= 0.10, "missed": not any_hit, "cer": c,
+                     "gt": e["text"], "ocr": " | ".join(h["text"] for h in seen)})
     return page, words, ents
 
 
@@ -122,7 +128,7 @@ def _mean(xs):
 def evaluate(out, data=None, per_lang=100, seed=7):
     data = find_data(data)
     recs = {r["id"]: r for r in load_sample(data, per_lang, seed, out)}
-    report, failures = {}, []
+    report, failures, outcomes = {}, [], {}  # outcomes[engine][(page_id, k)] = entity dict
     for path in sorted(glob.glob(os.path.join(out, "ocr_*.jsonl"))):
         engine = os.path.basename(path)[4:-6]
         pages, words, ents = [], [], []
@@ -143,6 +149,7 @@ def evaluate(out, data=None, per_lang=100, seed=7):
                 words += w
                 for x in e:
                     x.update(lang=rec["lang"], doc_type=rec["doc_type"], id=rec["id"])
+                    outcomes.setdefault(engine, {})[(rec["id"], x["k"])] = x
                     if not x["exact"]:
                         failures.append(dict(x, engine=engine))
                 ents += e
@@ -153,7 +160,8 @@ def evaluate(out, data=None, per_lang=100, seed=7):
             return {"pages": len(pg), "page_cer": _mean(p["page_cer"] for p in pg),
                     "word_recall": _mean(p["word_recall"] for p in pg),
                     "word_exact": _mean(x["exact"] for x in wd),
-                    "pii_exact": _mean(x["exact"] for x in en), "pii_near": _mean(x["near"] for x in en),
+                    "pii_exact": _mean(x["exact"] for x in en), "pii_found": _mean(x["found"] for x in en),
+                    "pii_near": _mean(x["near"] for x in en),
                     "pii_missed": _mean(x["missed"] for x in en), "sec_per_page": _mean(p["sec"] for p in pg)}
 
         rep = {"overall": summarise(pages, words, ents), "errors": n_err, "by_lang": {}, "by_doc_type": {},
@@ -176,8 +184,26 @@ def evaluate(out, data=None, per_lang=100, seed=7):
         for k in sorted(by_label):
             xs = by_label[k]
             rep["by_label"][k] = {"count": len(xs), "pii_exact": _mean(x["exact"] for x in xs),
+                                  "pii_found": _mean(x["found"] for x in xs),
                                   "pii_near": _mean(x["near"] for x in xs), "pii_missed": _mean(x["missed"] for x in xs)}
         report[engine] = rep
+
+    if len(outcomes) >= 2:  # best-of-both: found by ANY engine (only pages every engine processed)
+        common = set.intersection(*(set(o) for o in outcomes.values()))
+        merged = []
+        for key in common:
+            xs = [o[key] for o in outcomes.values()]
+            merged.append(dict(xs[0], exact=any(x["exact"] for x in xs), found=any(x["found"] for x in xs)))
+        best = {"engines": sorted(outcomes), "entities": len(merged),
+                "pii_exact": _mean(x["exact"] for x in merged), "pii_found": _mean(x["found"] for x in merged),
+                "by_lang": {}, "by_label": {}}
+        for lang in sorted({x["lang"] for x in merged}):
+            xs = [x for x in merged if x["lang"] == lang]
+            best["by_lang"][lang] = {"pii_exact": _mean(x["exact"] for x in xs), "pii_found": _mean(x["found"] for x in xs)}
+        for lab in sorted({x["label"] for x in merged}):
+            xs = [x for x in merged if x["label"] == lab]
+            best["by_label"][lab] = {"pii_found": _mean(x["found"] for x in xs)}
+        report["_best_of_all"] = best
 
     json.dump(report, open(os.path.join(out, "report.json"), "w"), indent=2, ensure_ascii=False)
     with open(os.path.join(out, "failures.jsonl"), "w", encoding="utf-8") as f:
@@ -194,37 +220,54 @@ def _pct(v):
 
 
 def to_markdown(report):
-    L = ["# Phase 2 — OCR benchmark on synthetic Indian documents\n"]
-    L.append("## Overall\n\n| Engine | Pages | Page CER ↓ | Word recall ↑ | PII exact ↑ | PII ≤10% CER ↑ | PII missed ↓ | Sec/page |")
-    L.append("|---|---|---|---|---|---|---|---|")
+    best = report.get("_best_of_all")
+    report = {k: v for k, v in report.items() if not k.startswith("_")}
+    engines = list(report)
+    L = ["# Phase 2 — OCR benchmark on synthetic Indian documents\n",
+         "*PII exact* = read character-perfect. *PII found* = read correctly ignoring punctuation/spaces "
+         "(what redaction needs). Indic digits (६३२२) count as equal to ASCII digits (6322).\n"]
+    L.append("## Overall\n\n| Engine | Pages | Page CER ↓ | Word recall ↑ | PII exact ↑ | PII found ↑ | PII ≤10% CER ↑ "
+             "| PII missed ↓ | Sec/page |")
+    L.append("|---|---|---|---|---|---|---|---|---|")
     for eng, r in report.items():
         o = r["overall"]
         L.append(f"| {eng} | {o['pages']} | {_pct(o['page_cer'])} | {_pct(o['word_recall'])} | {_pct(o['pii_exact'])} | "
-                 f"{_pct(o['pii_near'])} | {_pct(o['pii_missed'])} | {o['sec_per_page']:.2f} |")
-    L.append("\n## By language\n\n| Engine | Language | Page CER ↓ | Word recall ↑ | PII exact ↑ | PII missed ↓ |")
-    L.append("|---|---|---|---|---|---|")
+                 f"{_pct(o['pii_found'])} | {_pct(o['pii_near'])} | {_pct(o['pii_missed'])} | {o['sec_per_page']:.2f} |")
+    if best:
+        L.append(f"| **best of {' + '.join(best['engines'])}** | – | – | – | {_pct(best['pii_exact'])} | "
+                 f"**{_pct(best['pii_found'])}** | – | – | – |")
+    L.append("\n## By language\n\n| Engine | Language | Page CER ↓ | Word recall ↑ | PII exact ↑ | PII found ↑ | PII missed ↓ |")
+    L.append("|---|---|---|---|---|---|---|")
     for eng, r in report.items():
         for lang, o in r["by_lang"].items():
             L.append(f"| {eng} | {lang} | {_pct(o['page_cer'])} | {_pct(o['word_recall'])} | {_pct(o['pii_exact'])} | "
-                     f"{_pct(o['pii_missed'])} |")
+                     f"{_pct(o['pii_found'])} | {_pct(o['pii_missed'])} |")
+    if best:
+        for lang, o in best["by_lang"].items():
+            L.append(f"| **best of both** | {lang} | – | – | {_pct(o['pii_exact'])} | **{_pct(o['pii_found'])}** | – |")
     L.append("\n## Word accuracy by script\n\n| Engine | Script | Words | Exact ↑ | Word CER ↓ |")
     L.append("|---|---|---|---|---|")
     for eng, r in report.items():
         for sc, o in r["by_script"].items():
             L.append(f"| {eng} | {sc} | {o['words']} | {_pct(o['word_exact'])} | {_pct(o['word_cer'])} |")
     labels = sorted({k for r in report.values() for k in r["by_label"]})
-    engines = list(report)
-    L.append("\n## PII read exactly, by entity type\n")
-    L.append("| Entity | " + " | ".join(engines) + " |")
-    L.append("|---|" + "---|" * len(engines))
+    L.append("\n## PII by entity type (exact / found)\n")
+    L.append("| Entity | " + " | ".join(engines) + (" | best of both (found)" if best else "") + " |")
+    L.append("|---|" + "---|" * (len(engines) + (1 if best else 0)))
     for k in labels:
-        L.append(f"| {k} | " + " | ".join(_pct(report[e]["by_label"].get(k, {}).get("pii_exact", float("nan")))
-                                          for e in engines) + " |")
-    L.append("\n## PII read exactly, by document type\n")
+        cells = []
+        for e in engines:
+            o = report[e]["by_label"].get(k)
+            cells.append(f"{_pct(o['pii_exact'])} / {_pct(o['pii_found'])}" if o else "–")
+        if best:
+            base = k.split(" (")[0]
+            cells.append(_pct(best["by_label"].get(base, {}).get("pii_found", float("nan"))) if k == base else "")
+        L.append(f"| {k} | " + " | ".join(cells) + " |")
+    L.append("\n## PII found, by document type\n")
     L.append("| Document | " + " | ".join(engines) + " |")
     L.append("|---|" + "---|" * len(engines))
     for dt in sorted({d for r in report.values() for d in r["by_doc_type"]}):
-        L.append(f"| {dt} | " + " | ".join(_pct(report[e]["by_doc_type"].get(dt, {}).get("pii_exact", float("nan")))
+        L.append(f"| {dt} | " + " | ".join(_pct(report[e]["by_doc_type"].get(dt, {}).get("pii_found", float("nan")))
                                            for e in engines) + " |")
     return "\n".join(L) + "\n"
 
@@ -236,6 +279,7 @@ def make_charts(report, out):
         import matplotlib.pyplot as plt
     except ImportError:
         return
+    report = {k: v for k, v in report.items() if not k.startswith("_")}
     engines = list(report)
     if not engines:
         return
@@ -244,9 +288,9 @@ def make_charts(report, out):
     width = 0.8 / len(engines)
     for i, e in enumerate(engines):
         xs = [j + i * width for j in range(len(langs))]
-        axes[0].bar(xs, [100 * report[e]["by_lang"].get(l, {}).get("pii_exact", 0) for l in langs], width, label=e)
+        axes[0].bar(xs, [100 * report[e]["by_lang"].get(l, {}).get("pii_found", 0) for l in langs], width, label=e)
         axes[1].bar(xs, [100 * report[e]["by_lang"].get(l, {}).get("page_cer", 0) for l in langs], width, label=e)
-    for ax, t in zip(axes, ["PII read exactly (%) ↑", "Page character error rate (%) ↓"]):
+    for ax, t in zip(axes, ["PII found (%) ↑  (ignoring punctuation)", "Page character error rate (%) ↓"]):
         ax.set_xticks([j + width * (len(engines) - 1) / 2 for j in range(len(langs))])
         ax.set_xticklabels(langs)
         ax.set_title(t)
@@ -260,10 +304,10 @@ def make_charts(report, out):
     height = 0.8 / len(engines)
     for i, e in enumerate(engines):
         ys = [j + i * height for j in range(len(labels))]
-        ax.barh(ys, [100 * report[e]["by_label"].get(k, {}).get("pii_exact", 0) for k in labels], height, label=e)
+        ax.barh(ys, [100 * report[e]["by_label"].get(k, {}).get("pii_found", 0) for k in labels], height, label=e)
     ax.set_yticks([j + height * (len(engines) - 1) / 2 for j in range(len(labels))])
     ax.set_yticklabels(labels)
-    ax.set_xlabel("PII read exactly (%)")
+    ax.set_xlabel("PII found (%)  (ignoring punctuation)")
     ax.set_xlim(0, 100)
     ax.legend()
     fig.tight_layout()

@@ -9,7 +9,8 @@ import tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from parda.ocr.textnorm import cer, levenshtein, squash, substring_distance  # noqa: E402
+from parda.ocr.textnorm import cer, levenshtein, loose, norm, squash, substring_distance  # noqa: E402
+from parda.synth.canvas import available_scripts  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="parda_ocr_test_")
 
@@ -37,6 +38,20 @@ def test_edit_distance():
     assert cer("रमेश", "रमेश") == 0
 
 
+def test_indic_digits_and_loose():
+    assert norm("६३२२ ३७३० ८७६४") == "6322 3730 8764"      # Devanagari digits
+    assert norm("೧೨೩") == "123"                              # Kannada digits
+    assert loose("#173, 1st Main Rd,") == "1731stmainrd"
+    assert loose("रमेश कुमार") == "रमेशकुमार"                 # vowel signs (matras) must survive
+    assert loose("ಅಮಿತ್ ಕುಲಕರ್ಣಿ") == "ಅಮಿತ್ಕುಲಕರ್ಣಿ"
+    assert loose("Rekha31@Yahoo.co.in") == "rekha31yahoocoin"
+
+
+def _expected_pages():
+    # the generator drops hi-en when no Devanagari font is installed (e.g. an OCR-only Kaggle session)
+    return 6 * (2 if available_scripts()["deva"] else 1)
+
+
 def _bench(engine, noise=0.0, tag=None):
     out = os.path.join(TMP, tag or engine)
     args = ["parda.ocr.run_ocr", "--engine", engine, "--data", _data(), "--out", out, "--per_lang", "6"]
@@ -49,9 +64,9 @@ def _bench(engine, noise=0.0, tag=None):
 
 def test_oracle_perfect():
     r = _bench("oracle", 0.0, "oracle_clean")["oracle"]["overall"]
-    assert r["pages"] == 12, r
+    assert r["pages"] == _expected_pages(), r
     assert r["word_exact"] == 1.0, r
-    assert r["pii_exact"] == 1.0 and r["pii_missed"] == 0.0, r
+    assert r["pii_exact"] == 1.0 and r["pii_found"] == 1.0 and r["pii_missed"] == 0.0, r
     assert r["word_recall"] > 0.99 and r["page_cer"] < 0.01, r
 
 
@@ -65,7 +80,7 @@ def test_resume_skips_done():
     before = sum(1 for _ in open(os.path.join(out, "ocr_oracle.jsonl")))
     _py("parda.ocr.run_ocr", "--engine", "oracle", "--data", _data(), "--out", out, "--per_lang", "6")
     after = sum(1 for _ in open(os.path.join(out, "ocr_oracle.jsonl")))
-    assert before == after == 12
+    assert before == after == _expected_pages()
 
 
 def test_find_data_zip_and_duplicates():
@@ -108,6 +123,23 @@ def test_tesseract_end_to_end():
     assert en["pii_exact"] > 0.5 and en["page_cer"] < 0.5, en
     for f in ("report.md", "failures.jsonl"):
         assert os.path.exists(os.path.join(TMP, "tesseract", f))
+
+
+def test_best_of_both():
+    out = os.path.join(TMP, "combo")
+    for eng, extra in (("oracle", ["--noise", "0.15"]), ("tesseract", [])):
+        if eng == "tesseract" and shutil.which("tesseract") is None:
+            print("   (skipped: tesseract not installed)")
+            return
+        _py("parda.ocr.run_ocr", "--engine", eng, "--data", _data(), "--out", out, "--per_lang", "6", *extra)
+    _py("parda.ocr.evaluate", "--out", out, "--data", _data(), "--per_lang", "6")
+    rep = json.load(open(os.path.join(out, "report.json")))
+    best = rep["_best_of_all"]
+    assert best["engines"] == ["oracle", "tesseract"]
+    for e in ("oracle", "tesseract"):
+        assert best["pii_found"] >= rep[e]["overall"]["pii_found"] - 1e-9, (best, e)
+    md = open(os.path.join(out, "report.md"), encoding="utf-8").read()
+    assert "best of oracle + tesseract" in md
 
 
 if __name__ == "__main__":
