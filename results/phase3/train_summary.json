@@ -1,0 +1,19 @@
+{
+  "strategy": "model.train_model",
+  "steps": 3131,
+  "minutes": 54.4,
+  "sec_per_step": 1.042,
+  "first_loss": 68.72099609375,
+  "last_loss": 1.0217350006103516,
+  "eval_losses": [
+    3.1722445487976074,
+    3.690255641937256,
+    1.545621395111084,
+    1.225341796875,
+    1.4582511186599731,
+    1.2618231773376465
+  ],
+  "base": "urchade/gliner_multi_pii-v1",
+  "train_examples": 25028,
+  "fp16": false
+}

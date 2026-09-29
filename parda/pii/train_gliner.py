@@ -9,10 +9,15 @@
 
 Saves the final model to <out>/final (GLiNER format), optionally uploads it to a private HF repo.
 """
+import os
+
+# GLiNER batches break under torch DataParallel (Kaggle "T4 x2" exposes 2 GPUs). Pin to one GPU
+# unless the caller already chose devices.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+
 import argparse
 import json
 import math
-import os
 import random
 import time
 
@@ -26,6 +31,24 @@ def load_examples(path, limit=None, seed=0):
     if limit and len(exs) > limit:
         exs = random.Random(seed).sample(exs, limit)
     return exs
+
+
+def clean(exs, name):
+    """Drop examples GLiNER can't train on (empty OCR tokens, bad spans, unknown labels).
+
+    A handful of Tesseract pages yield blank word segments; one bad example used to abort the whole run.
+    """
+    def ok(ex):
+        toks, ner = ex.get("tokenized_text"), ex.get("ner")
+        if not (isinstance(toks, list) and toks and all(isinstance(t, str) and t.strip() for t in toks)):
+            return False
+        if not isinstance(ner, list):
+            return False
+        return all(len(x) == 3 and 0 <= x[0] <= x[1] < len(toks) and x[2] in VALID_LABELS for x in ner)
+    good = [ex for ex in exs if ok(ex)]
+    if len(good) < len(exs):
+        print(f"{name}: dropped {len(exs) - len(good)} broken examples, kept {len(good)}", flush=True)
+    return good
 
 
 def validate(exs, name):
@@ -200,7 +223,7 @@ def train(a, tr, va):
     losses = [h["loss"] for h in history if "loss" in h]
     evals = [h["eval_loss"] for h in history if "eval_loss" in h]
     if losses and any(x != x for x in losses):
-        print("WARNING: NaN loss seen. Re-run with --no_fp16", flush=True)
+        print("WARNING: NaN loss seen. Do not use --fp16", flush=True)
     final = os.path.join(a.out, "final")
     model.save_pretrained(final)
     summary = {"strategy": strategy, "steps": steps, "minutes": round(dt / 60, 1), "sec_per_step": round(dt / steps, 3),
@@ -241,7 +264,9 @@ def main(argv=None):
     ap.add_argument("--max_train", type=int, default=None)
     ap.add_argument("--max_val", type=int, default=600)
     ap.add_argument("--max_hours", type=float, default=8.0)
-    ap.add_argument("--no_fp16", action="store_true")
+    ap.add_argument("--no_fp16", action="store_true", default=True,
+                    help="default: fp32. mDeBERTa overflows in fp16 (grad_norm=nan, every step skipped)")
+    ap.add_argument("--fp16", dest="no_fp16", action="store_false", help="enable fp16 (risk of NaN gradients)")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--wandb", action="store_true")
     ap.add_argument("--hf_repo", default=None, help="e.g. yourname/parda-gliner (private)")
@@ -253,6 +278,7 @@ def main(argv=None):
         a.max_train, a.max_val, a.max_steps, a.save_steps, a.log_steps = 64, 16, 10, 5, 2
     tr = load_examples(os.path.join(a.data_dir, "train.json"), a.max_train)
     va = load_examples(os.path.join(a.data_dir, "val.json"), a.max_val)
+    tr, va = clean(tr, "train"), clean(va, "val")
     info = {"train": validate(tr, "train"), "val": validate(va, "val")}
     print(json.dumps(info, indent=2), flush=True)
     if a.dry_run:

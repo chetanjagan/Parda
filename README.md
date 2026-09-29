@@ -80,6 +80,16 @@ python -m parda.pii.evaluate_pii --ocr outputs/bench/ocr_tesseract.jsonl --ft ou
 ```
 Results: `results/phase3/`.
 
+| System (300 held-out scanned pages) | Fully redacted | Over-redaction | en | hi-en | kn-en |
+|---|---|---|---|---|---|
+| Rules only | 21.4% | 7.6% | 26.1% | 15.1% | 23.4% |
+| Off-the-shelf GLiNER + rules | 60.0% | 29.1% | 66.9% | 62.3% | 51.4% |
+| **Fine-tuned GLiNER (this project)** | **80.4%** | **10.4%** | **79.7%** | **85.5%** | **76.0%** |
+
+Fine-tuned on 25,028 clean + OCR-noisy examples in 54 min on one free Kaggle T4.
+Biggest gains: person names 39% → 82%, MRN 38% → 89%, Kannada 51% → 76%.
+Remaining gaps (address 27%, employee ID 24%) come mainly from OCR and are addressed in Phase 5.
+
 ## Labels
 
 Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID

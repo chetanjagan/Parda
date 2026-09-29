@@ -342,6 +342,17 @@ def test_train_glue_old_and_new_gliner_api():
         assert "pan number" in r.stdout  # sanity prediction printed
 
 
+def test_clean_drops_broken_examples():
+    from parda.pii.train_gliner import clean
+    good = {"tokenized_text": ["Name", "Ravi"], "ner": [[1, 1, "person name"]]}
+    exs = [good,
+           {"tokenized_text": ["Name", ""], "ner": []},                  # blank OCR token (the real Kaggle bug)
+           {"tokenized_text": [], "ner": []},                            # no tokens
+           {"tokenized_text": ["a"], "ner": [[0, 5, "person name"]]},    # span out of range
+           {"tokenized_text": ["a"], "ner": [[0, 0, "not a label"]]}]    # unknown label
+    assert clean(exs, "t") == [good]
+
+
 if __name__ == "__main__":
     try:
         for k, f in list(globals().items()):

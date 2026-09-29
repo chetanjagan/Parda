@@ -1,0 +1,836 @@
+{
+  "rules": {
+    "overall": {
+      "items": 2597,
+      "fully_redacted": 0.2144782441278398,
+      "char_recall": 0.22175841377511088,
+      "over_redaction": 0.07608695652173914,
+      "typed_recall": 0.2210242587601078,
+      "span_precision": 0.919431279620853
+    },
+    "by_lang": {
+      "en": {
+        "items": 827,
+        "fully_redacted": 0.26118500604594924,
+        "char_recall": 0.2647180334641603,
+        "over_redaction": 0.09081234480312167,
+        "typed_recall": 0.26118500604594924,
+        "span_precision": 0.9049586776859504
+      },
+      "hi-en": {
+        "items": 883,
+        "fully_redacted": 0.1506228765571914,
+        "char_recall": 0.1626750184229919,
+        "over_redaction": 0.04849137931034483,
+        "typed_recall": 0.16534541336353342,
+        "span_precision": 0.949685534591195
+      },
+      "kn-en": {
+        "items": 887,
+        "fully_redacted": 0.23449830890642615,
+        "char_recall": 0.24402528145368357,
+        "over_redaction": 0.07970204841713222,
+        "typed_recall": 0.23900789177001128,
+        "span_precision": 0.9137931034482759
+      }
+    },
+    "by_label": {
+      "AADHAAR": {
+        "items": 126,
+        "fully_redacted": 0.6904761904761905,
+        "char_recall": 0.7639751552795031,
+        "over_redaction": NaN,
+        "typed_recall": 0.6904761904761905,
+        "span_precision": NaN
+      },
+      "ABHA": {
+        "items": 45,
+        "fully_redacted": 0.7333333333333333,
+        "char_recall": 0.8048780487804879,
+        "over_redaction": NaN,
+        "typed_recall": 0.7333333333333333,
+        "span_precision": NaN
+      },
+      "ADDRESS": {
+        "items": 213,
+        "fully_redacted": 0.0,
+        "char_recall": 0.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.0,
+        "span_precision": NaN
+      },
+      "BANK_ACCOUNT": {
+        "items": 126,
+        "fully_redacted": 0.03968253968253968,
+        "char_recall": 0.049680624556423,
+        "over_redaction": NaN,
+        "typed_recall": 0.0,
+        "span_precision": NaN
+      },
+      "DOB": {
+        "items": 216,
+        "fully_redacted": 0.0,
+        "char_recall": 0.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.0,
+        "span_precision": NaN
+      },
+      "EMAIL": {
+        "items": 42,
+        "fully_redacted": 0.8333333333333334,
+        "char_recall": 0.8940217391304348,
+        "over_redaction": NaN,
+        "typed_recall": 0.8809523809523809,
+        "span_precision": NaN
+      },
+      "EMPLOYEE_ID": {
+        "items": 42,
+        "fully_redacted": 0.0,
+        "char_recall": 0.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.0,
+        "span_precision": NaN
+      },
+      "GSTIN": {
+        "items": 42,
+        "fully_redacted": 0.23809523809523808,
+        "char_recall": 0.29464285714285715,
+        "over_redaction": NaN,
+        "typed_recall": 0.2619047619047619,
+        "span_precision": NaN
+      },
+      "IFSC": {
+        "items": 126,
+        "fully_redacted": 0.4365079365079365,
+        "char_recall": 0.5309584393553859,
+        "over_redaction": NaN,
+        "typed_recall": 0.4444444444444444,
+        "span_precision": NaN
+      },
+      "MRN": {
+        "items": 45,
+        "fully_redacted": 0.0,
+        "char_recall": 0.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.0,
+        "span_precision": NaN
+      },
+      "PAN": {
+        "items": 171,
+        "fully_redacted": 0.543859649122807,
+        "char_recall": 0.6638115631691649,
+        "over_redaction": NaN,
+        "typed_recall": 0.5321637426900585,
+        "span_precision": NaN
+      },
+      "PERSON_NAME": {
+        "items": 1019,
+        "fully_redacted": 0.0,
+        "char_recall": 0.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.0,
+        "span_precision": NaN
+      },
+      "PHONE": {
+        "items": 216,
+        "fully_redacted": 0.6342592592592593,
+        "char_recall": 0.8334174659262998,
+        "over_redaction": NaN,
+        "typed_recall": 0.7361111111111112,
+        "span_precision": NaN
+      },
+      "UAN": {
+        "items": 42,
+        "fully_redacted": 0.5476190476190477,
+        "char_recall": 0.6989795918367347,
+        "over_redaction": NaN,
+        "typed_recall": 0.47619047619047616,
+        "span_precision": NaN
+      },
+      "UPI_ID": {
+        "items": 84,
+        "fully_redacted": 0.5238095238095238,
+        "char_recall": 0.5506993006993007,
+        "over_redaction": NaN,
+        "typed_recall": 0.5357142857142857,
+        "span_precision": NaN
+      },
+      "VOTER_ID": {
+        "items": 42,
+        "fully_redacted": 0.8333333333333334,
+        "char_recall": 0.8413461538461539,
+        "over_redaction": NaN,
+        "typed_recall": 0.8333333333333334,
+        "span_precision": NaN
+      }
+    }
+  },
+  "gliner_base@0.3": {
+    "overall": {
+      "items": 2597,
+      "fully_redacted": 0.568348093954563,
+      "char_recall": 0.5709626924080354,
+      "over_redaction": 0.299764028316602,
+      "typed_recall": 0.5267616480554486,
+      "span_precision": 0.6792189679218968
+    },
+    "by_lang": {
+      "en": {
+        "items": 827,
+        "fully_redacted": 0.6396614268440145,
+        "char_recall": 0.6533774013633546,
+        "over_redaction": 0.28235961429381734,
+        "typed_recall": 0.5937122128174124,
+        "span_precision": 0.6933333333333334
+      },
+      "hi-en": {
+        "items": 883,
+        "fully_redacted": 0.5990939977349944,
+        "char_recall": 0.5747052321296978,
+        "over_redaction": 0.26952347500292706,
+        "typed_recall": 0.565118912797282,
+        "span_precision": 0.7090163934426229
+      },
+      "kn-en": {
+        "items": 887,
+        "fully_redacted": 0.47125140924464487,
+        "char_recall": 0.48814931858581867,
+        "over_redaction": 0.35360272002092324,
+        "typed_recall": 0.42615558060879366,
+        "span_precision": 0.6307922272047832
+      }
+    },
+    "by_label": {
+      "AADHAAR": {
+        "items": 126,
+        "fully_redacted": 0.6031746031746031,
+        "char_recall": 0.6350931677018633,
+        "over_redaction": NaN,
+        "typed_recall": 0.5793650793650794,
+        "span_precision": NaN
+      },
+      "ABHA": {
+        "items": 45,
+        "fully_redacted": 0.9333333333333333,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.9111111111111111,
+        "span_precision": NaN
+      },
+      "ADDRESS": {
+        "items": 213,
+        "fully_redacted": 0.2347417840375587,
+        "char_recall": 0.23987182421606776,
+        "over_redaction": NaN,
+        "typed_recall": 0.2535211267605634,
+        "span_precision": NaN
+      },
+      "BANK_ACCOUNT": {
+        "items": 126,
+        "fully_redacted": 0.753968253968254,
+        "char_recall": 0.8537970191625266,
+        "over_redaction": NaN,
+        "typed_recall": 0.7142857142857143,
+        "span_precision": NaN
+      },
+      "DOB": {
+        "items": 216,
+        "fully_redacted": 0.875,
+        "char_recall": 0.9166666666666666,
+        "over_redaction": NaN,
+        "typed_recall": 0.8564814814814815,
+        "span_precision": NaN
+      },
+      "EMAIL": {
+        "items": 42,
+        "fully_redacted": 0.9285714285714286,
+        "char_recall": 0.9633152173913043,
+        "over_redaction": NaN,
+        "typed_recall": 0.9523809523809523,
+        "span_precision": NaN
+      },
+      "EMPLOYEE_ID": {
+        "items": 42,
+        "fully_redacted": 0.23809523809523808,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.23809523809523808,
+        "span_precision": NaN
+      },
+      "GSTIN": {
+        "items": 42,
+        "fully_redacted": 0.8333333333333334,
+        "char_recall": 0.9642857142857143,
+        "over_redaction": NaN,
+        "typed_recall": 0.6666666666666666,
+        "span_precision": NaN
+      },
+      "IFSC": {
+        "items": 126,
+        "fully_redacted": 0.8333333333333334,
+        "char_recall": 0.9804919423240034,
+        "over_redaction": NaN,
+        "typed_recall": 0.8174603174603174,
+        "span_precision": NaN
+      },
+      "MRN": {
+        "items": 45,
+        "fully_redacted": 0.37777777777777777,
+        "char_recall": 0.4066797642436149,
+        "over_redaction": NaN,
+        "typed_recall": 0.15555555555555556,
+        "span_precision": NaN
+      },
+      "PAN": {
+        "items": 171,
+        "fully_redacted": 0.7719298245614035,
+        "char_recall": 0.9271948608137045,
+        "over_redaction": NaN,
+        "typed_recall": 0.5321637426900585,
+        "span_precision": NaN
+      },
+      "PERSON_NAME": {
+        "items": 1019,
+        "fully_redacted": 0.38763493621197254,
+        "char_recall": 0.4582179132040628,
+        "over_redaction": NaN,
+        "typed_recall": 0.39450441609421,
+        "span_precision": NaN
+      },
+      "PHONE": {
+        "items": 216,
+        "fully_redacted": 0.7268518518518519,
+        "char_recall": 0.834427057041898,
+        "over_redaction": NaN,
+        "typed_recall": 0.6481481481481481,
+        "span_precision": NaN
+      },
+      "UAN": {
+        "items": 42,
+        "fully_redacted": 0.7857142857142857,
+        "char_recall": 0.9693877551020408,
+        "over_redaction": NaN,
+        "typed_recall": 0.6666666666666666,
+        "span_precision": NaN
+      },
+      "UPI_ID": {
+        "items": 84,
+        "fully_redacted": 0.8690476190476191,
+        "char_recall": 0.951048951048951,
+        "over_redaction": NaN,
+        "typed_recall": 0.5833333333333334,
+        "span_precision": NaN
+      },
+      "VOTER_ID": {
+        "items": 42,
+        "fully_redacted": 0.6666666666666666,
+        "char_recall": 0.6634615384615384,
+        "over_redaction": NaN,
+        "typed_recall": 0.6428571428571429,
+        "span_precision": NaN
+      }
+    }
+  },
+  "gliner_base@0.5": {
+    "overall": {
+      "items": 2597,
+      "fully_redacted": 0.4948016942626107,
+      "char_recall": 0.5058374641273155,
+      "over_redaction": 0.23003226607098537,
+      "typed_recall": 0.46515209857527917,
+      "span_precision": 0.8097964376590331
+    },
+    "by_lang": {
+      "en": {
+        "items": 827,
+        "fully_redacted": 0.585247883917775,
+        "char_recall": 0.6042140053707912,
+        "over_redaction": 0.2220744680851064,
+        "typed_recall": 0.5489721886336155,
+        "span_precision": 0.8122866894197952
+      },
+      "hi-en": {
+        "items": 883,
+        "fully_redacted": 0.5096262740656852,
+        "char_recall": 0.4999078850405306,
+        "over_redaction": 0.20202911336568152,
+        "typed_recall": 0.48357870894677235,
+        "span_precision": 0.8377358490566038
+      },
+      "kn-en": {
+        "items": 887,
+        "fully_redacted": 0.39571589627959414,
+        "char_recall": 0.4181315425636974,
+        "over_redaction": 0.27300824175824173,
+        "typed_recall": 0.3686583990980834,
+        "span_precision": 0.7741228070175439
+      }
+    },
+    "by_label": {
+      "AADHAAR": {
+        "items": 126,
+        "fully_redacted": 0.5714285714285714,
+        "char_recall": 0.6001552795031055,
+        "over_redaction": NaN,
+        "typed_recall": 0.5634920634920635,
+        "span_precision": NaN
+      },
+      "ABHA": {
+        "items": 45,
+        "fully_redacted": 0.8888888888888888,
+        "char_recall": 0.9512195121951219,
+        "over_redaction": NaN,
+        "typed_recall": 0.8888888888888888,
+        "span_precision": NaN
+      },
+      "ADDRESS": {
+        "items": 213,
+        "fully_redacted": 0.2300469483568075,
+        "char_recall": 0.23197528038452736,
+        "over_redaction": NaN,
+        "typed_recall": 0.24413145539906103,
+        "span_precision": NaN
+      },
+      "BANK_ACCOUNT": {
+        "items": 126,
+        "fully_redacted": 0.6984126984126984,
+        "char_recall": 0.7877927608232789,
+        "over_redaction": NaN,
+        "typed_recall": 0.6746031746031746,
+        "span_precision": NaN
+      },
+      "DOB": {
+        "items": 216,
+        "fully_redacted": 0.8287037037037037,
+        "char_recall": 0.8694029850746269,
+        "over_redaction": NaN,
+        "typed_recall": 0.8287037037037037,
+        "span_precision": NaN
+      },
+      "EMAIL": {
+        "items": 42,
+        "fully_redacted": 0.9285714285714286,
+        "char_recall": 0.9442934782608695,
+        "over_redaction": NaN,
+        "typed_recall": 0.9285714285714286,
+        "span_precision": NaN
+      },
+      "EMPLOYEE_ID": {
+        "items": 42,
+        "fully_redacted": 0.23809523809523808,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.23809523809523808,
+        "span_precision": NaN
+      },
+      "GSTIN": {
+        "items": 42,
+        "fully_redacted": 0.7857142857142857,
+        "char_recall": 0.9321428571428572,
+        "over_redaction": NaN,
+        "typed_recall": 0.6666666666666666,
+        "span_precision": NaN
+      },
+      "IFSC": {
+        "items": 126,
+        "fully_redacted": 0.8095238095238095,
+        "char_recall": 0.9533502968617472,
+        "over_redaction": NaN,
+        "typed_recall": 0.8174603174603174,
+        "span_precision": NaN
+      },
+      "MRN": {
+        "items": 45,
+        "fully_redacted": 0.1111111111111111,
+        "char_recall": 0.12180746561886051,
+        "over_redaction": NaN,
+        "typed_recall": 0.044444444444444446,
+        "span_precision": NaN
+      },
+      "PAN": {
+        "items": 171,
+        "fully_redacted": 0.7368421052631579,
+        "char_recall": 0.8850820842255531,
+        "over_redaction": NaN,
+        "typed_recall": 0.5087719298245614,
+        "span_precision": NaN
+      },
+      "PERSON_NAME": {
+        "items": 1019,
+        "fully_redacted": 0.2845927379784102,
+        "char_recall": 0.33852723915050786,
+        "over_redaction": NaN,
+        "typed_recall": 0.2914622178606477,
+        "span_precision": NaN
+      },
+      "PHONE": {
+        "items": 216,
+        "fully_redacted": 0.6296296296296297,
+        "char_recall": 0.729429581019687,
+        "over_redaction": NaN,
+        "typed_recall": 0.5833333333333334,
+        "span_precision": NaN
+      },
+      "UAN": {
+        "items": 42,
+        "fully_redacted": 0.7619047619047619,
+        "char_recall": 0.9387755102040817,
+        "over_redaction": NaN,
+        "typed_recall": 0.6666666666666666,
+        "span_precision": NaN
+      },
+      "UPI_ID": {
+        "items": 84,
+        "fully_redacted": 0.8571428571428571,
+        "char_recall": 0.9475524475524476,
+        "over_redaction": NaN,
+        "typed_recall": 0.5833333333333334,
+        "span_precision": NaN
+      },
+      "VOTER_ID": {
+        "items": 42,
+        "fully_redacted": 0.2857142857142857,
+        "char_recall": 0.2860576923076923,
+        "over_redaction": NaN,
+        "typed_recall": 0.2857142857142857,
+        "span_precision": NaN
+      }
+    }
+  },
+  "gliner_base@0.3 + rules": {
+    "overall": {
+      "items": 2597,
+      "fully_redacted": 0.6003080477474009,
+      "char_recall": 0.6004435168275503,
+      "over_redaction": 0.29080964486557276,
+      "typed_recall": 0.5818251829033501,
+      "span_precision": 0.6965131295738269
+    },
+    "by_lang": {
+      "en": {
+        "items": 827,
+        "fully_redacted": 0.6686819830713422,
+        "char_recall": 0.6787853749225367,
+        "over_redaction": 0.2766894122826326,
+        "typed_recall": 0.6481257557436517,
+        "span_precision": 0.707196029776675
+      },
+      "hi-en": {
+        "items": 883,
+        "fully_redacted": 0.622876557191393,
+        "char_recall": 0.5955232129697863,
+        "over_redaction": 0.26341574569898596,
+        "typed_recall": 0.6036240090600227,
+        "span_precision": 0.7190721649484536
+      },
+      "kn-en": {
+        "items": 887,
+        "fully_redacted": 0.5140924464487034,
+        "char_recall": 0.5308117716768714,
+        "over_redaction": 0.3363378194838869,
+        "typed_recall": 0.4983089064261556,
+        "span_precision": 0.6612685560053981
+      }
+    },
+    "by_label": {
+      "AADHAAR": {
+        "items": 126,
+        "fully_redacted": 0.8571428571428571,
+        "char_recall": 0.9332298136645962,
+        "over_redaction": NaN,
+        "typed_recall": 0.8412698412698413,
+        "span_precision": NaN
+      },
+      "ABHA": {
+        "items": 45,
+        "fully_redacted": 0.9333333333333333,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.9333333333333333,
+        "span_precision": NaN
+      },
+      "ADDRESS": {
+        "items": 213,
+        "fully_redacted": 0.2347417840375587,
+        "char_recall": 0.23987182421606776,
+        "over_redaction": NaN,
+        "typed_recall": 0.2535211267605634,
+        "span_precision": NaN
+      },
+      "BANK_ACCOUNT": {
+        "items": 126,
+        "fully_redacted": 0.753968253968254,
+        "char_recall": 0.8537970191625266,
+        "over_redaction": NaN,
+        "typed_recall": 0.7142857142857143,
+        "span_precision": NaN
+      },
+      "DOB": {
+        "items": 216,
+        "fully_redacted": 0.875,
+        "char_recall": 0.9166666666666666,
+        "over_redaction": NaN,
+        "typed_recall": 0.8564814814814815,
+        "span_precision": NaN
+      },
+      "EMAIL": {
+        "items": 42,
+        "fully_redacted": 0.9523809523809523,
+        "char_recall": 0.9864130434782609,
+        "over_redaction": NaN,
+        "typed_recall": 0.9761904761904762,
+        "span_precision": NaN
+      },
+      "EMPLOYEE_ID": {
+        "items": 42,
+        "fully_redacted": 0.23809523809523808,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.23809523809523808,
+        "span_precision": NaN
+      },
+      "GSTIN": {
+        "items": 42,
+        "fully_redacted": 0.8333333333333334,
+        "char_recall": 0.9642857142857143,
+        "over_redaction": NaN,
+        "typed_recall": 0.7619047619047619,
+        "span_precision": NaN
+      },
+      "IFSC": {
+        "items": 126,
+        "fully_redacted": 0.8333333333333334,
+        "char_recall": 0.9804919423240034,
+        "over_redaction": NaN,
+        "typed_recall": 0.8253968253968254,
+        "span_precision": NaN
+      },
+      "MRN": {
+        "items": 45,
+        "fully_redacted": 0.37777777777777777,
+        "char_recall": 0.4066797642436149,
+        "over_redaction": NaN,
+        "typed_recall": 0.15555555555555556,
+        "span_precision": NaN
+      },
+      "PAN": {
+        "items": 171,
+        "fully_redacted": 0.8128654970760234,
+        "char_recall": 0.9771591720199857,
+        "over_redaction": NaN,
+        "typed_recall": 0.7368421052631579,
+        "span_precision": NaN
+      },
+      "PERSON_NAME": {
+        "items": 1019,
+        "fully_redacted": 0.38763493621197254,
+        "char_recall": 0.4582179132040628,
+        "over_redaction": NaN,
+        "typed_recall": 0.39450441609421,
+        "span_precision": NaN
+      },
+      "PHONE": {
+        "items": 216,
+        "fully_redacted": 0.8379629629629629,
+        "char_recall": 0.9681978798586572,
+        "over_redaction": NaN,
+        "typed_recall": 0.8518518518518519,
+        "span_precision": NaN
+      },
+      "UAN": {
+        "items": 42,
+        "fully_redacted": 0.8095238095238095,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.7619047619047619,
+        "span_precision": NaN
+      },
+      "UPI_ID": {
+        "items": 84,
+        "fully_redacted": 0.9642857142857143,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.6904761904761905,
+        "span_precision": NaN
+      },
+      "VOTER_ID": {
+        "items": 42,
+        "fully_redacted": 0.9047619047619048,
+        "char_recall": 0.9038461538461539,
+        "over_redaction": NaN,
+        "typed_recall": 0.9047619047619048,
+        "span_precision": NaN
+      }
+    }
+  },
+  "gliner_base@0.5 + rules": {
+    "overall": {
+      "items": 2597,
+      "fully_redacted": 0.5440893338467463,
+      "char_recall": 0.5504500391338377,
+      "over_redaction": 0.21939601350413912,
+      "typed_recall": 0.5321524836349634,
+      "span_precision": 0.8217097862767154
+    },
+    "by_lang": {
+      "en": {
+        "items": 827,
+        "fully_redacted": 0.6348246674727932,
+        "char_recall": 0.6473869035323281,
+        "over_redaction": 0.21728271728271728,
+        "typed_recall": 0.619105199516324,
+        "span_precision": 0.8191489361702128
+      },
+      "hi-en": {
+        "items": 883,
+        "fully_redacted": 0.5447338618346546,
+        "char_recall": 0.5299373618275608,
+        "over_redaction": 0.195046872813768,
+        "typed_recall": 0.5322763306908267,
+        "span_precision": 0.8439108061749572
+      },
+      "kn-en": {
+        "items": 887,
+        "fully_redacted": 0.4588500563697858,
+        "char_recall": 0.47975508591744026,
+        "over_redaction": 0.24891774891774893,
+        "typed_recall": 0.4509582863585118,
+        "span_precision": 0.8007448789571695
+      }
+    },
+    "by_label": {
+      "AADHAAR": {
+        "items": 126,
+        "fully_redacted": 0.8412698412698413,
+        "char_recall": 0.9169254658385093,
+        "over_redaction": NaN,
+        "typed_recall": 0.8333333333333334,
+        "span_precision": NaN
+      },
+      "ABHA": {
+        "items": 45,
+        "fully_redacted": 0.9333333333333333,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.9333333333333333,
+        "span_precision": NaN
+      },
+      "ADDRESS": {
+        "items": 213,
+        "fully_redacted": 0.2300469483568075,
+        "char_recall": 0.23197528038452736,
+        "over_redaction": NaN,
+        "typed_recall": 0.24413145539906103,
+        "span_precision": NaN
+      },
+      "BANK_ACCOUNT": {
+        "items": 126,
+        "fully_redacted": 0.6984126984126984,
+        "char_recall": 0.7877927608232789,
+        "over_redaction": NaN,
+        "typed_recall": 0.6746031746031746,
+        "span_precision": NaN
+      },
+      "DOB": {
+        "items": 216,
+        "fully_redacted": 0.8287037037037037,
+        "char_recall": 0.8694029850746269,
+        "over_redaction": NaN,
+        "typed_recall": 0.8287037037037037,
+        "span_precision": NaN
+      },
+      "EMAIL": {
+        "items": 42,
+        "fully_redacted": 0.9523809523809523,
+        "char_recall": 0.967391304347826,
+        "over_redaction": NaN,
+        "typed_recall": 0.9523809523809523,
+        "span_precision": NaN
+      },
+      "EMPLOYEE_ID": {
+        "items": 42,
+        "fully_redacted": 0.23809523809523808,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.23809523809523808,
+        "span_precision": NaN
+      },
+      "GSTIN": {
+        "items": 42,
+        "fully_redacted": 0.7857142857142857,
+        "char_recall": 0.9321428571428572,
+        "over_redaction": NaN,
+        "typed_recall": 0.7619047619047619,
+        "span_precision": NaN
+      },
+      "IFSC": {
+        "items": 126,
+        "fully_redacted": 0.8253968253968254,
+        "char_recall": 0.9711620016963528,
+        "over_redaction": NaN,
+        "typed_recall": 0.8253968253968254,
+        "span_precision": NaN
+      },
+      "MRN": {
+        "items": 45,
+        "fully_redacted": 0.1111111111111111,
+        "char_recall": 0.12180746561886051,
+        "over_redaction": NaN,
+        "typed_recall": 0.044444444444444446,
+        "span_precision": NaN
+      },
+      "PAN": {
+        "items": 171,
+        "fully_redacted": 0.7953216374269005,
+        "char_recall": 0.9564596716630978,
+        "over_redaction": NaN,
+        "typed_recall": 0.7251461988304093,
+        "span_precision": NaN
+      },
+      "PERSON_NAME": {
+        "items": 1019,
+        "fully_redacted": 0.2845927379784102,
+        "char_recall": 0.33852723915050786,
+        "over_redaction": NaN,
+        "typed_recall": 0.2914622178606477,
+        "span_precision": NaN
+      },
+      "PHONE": {
+        "items": 216,
+        "fully_redacted": 0.8333333333333334,
+        "char_recall": 0.9666834931852599,
+        "over_redaction": NaN,
+        "typed_recall": 0.8518518518518519,
+        "span_precision": NaN
+      },
+      "UAN": {
+        "items": 42,
+        "fully_redacted": 0.8095238095238095,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.7619047619047619,
+        "span_precision": NaN
+      },
+      "UPI_ID": {
+        "items": 84,
+        "fully_redacted": 0.9642857142857143,
+        "char_recall": 1.0,
+        "over_redaction": NaN,
+        "typed_recall": 0.6904761904761905,
+        "span_precision": NaN
+      },
+      "VOTER_ID": {
+        "items": 42,
+        "fully_redacted": 0.8571428571428571,
+        "char_recall": 0.8629807692307693,
+        "over_redaction": NaN,
+        "typed_recall": 0.8571428571428571,
+        "span_precision": NaN
+      }
+    }
+  },
+  "_meta": {
+    "pages": 300,
+    "ocr": "/kaggle/working/bench/ocr_tesseract.jsonl"
+  }
+}
