@@ -10,7 +10,9 @@ matplotlib
 # easyocr and paddleocr are installed by scripts/setup_ocr.sh / the notebook (GPU)
 # --- Phase 3: PII model (GPU, installed in the notebook) ---
 # gliner
+# --- Phase 4: visual detector (GPU, installed in the notebook; brings opencv) ---
+# ultralytics
+# --- Phase 5: pipeline (installed in the notebook) ---
+# pymupdf  (PDF input), huggingface_hub (model download)
 # --- later phases ---
-ultralytics>=8.2.0
-huggingface_hub
-# transformers, datasets, onnxruntime, wandb
+# onnxruntime

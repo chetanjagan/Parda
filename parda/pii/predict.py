@@ -76,10 +76,13 @@ class GoldPredictor:
 
 
 def load_gliner(path_or_id):
-    import torch
     from gliner import GLiNER
     m = GLiNER.from_pretrained(path_or_id)
-    if torch.cuda.is_available():
-        m = m.to("cuda")
+    try:
+        import torch
+        if torch.cuda.is_available():
+            m = m.to("cuda")
+    except ImportError:
+        pass
     m.eval()
     return m

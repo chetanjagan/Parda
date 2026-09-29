@@ -22,7 +22,7 @@ def _xyxy(points):
 # ---------------------------------------------------------------- Tesseract (CPU)
 class TesseractEngine:
     name = "tesseract"
-    LANG = {"en": "eng", "hi-en": "hin+eng", "kn-en": "kan+eng"}
+    LANG = {"en": "eng", "hi-en": "hin+eng", "kn-en": "kan+eng", "auto": "eng+hin+kan"}  # auto: unknown language
 
     def __init__(self, psm: int = 3):
         self.psm = psm
@@ -54,7 +54,7 @@ class TesseractEngine:
 class EasyOCREngine:
     name = "easyocr"
     # EasyOCR can only mix a non-Latin script with English, so one reader per document language
-    LANG = {"en": ["en"], "hi-en": ["hi", "en"], "kn-en": ["kn", "en"]}
+    LANG = {"en": ["en"], "hi-en": ["hi", "en"], "kn-en": ["kn", "en"], "auto": ["en"]}
 
     def __init__(self, gpu: bool = True):
         import easyocr  # noqa: F401
@@ -169,8 +169,16 @@ class OracleEngine:
         return segs
 
 
+class WordOracleEngine:
+    """Testing only: every true word as its own segment with its true box (a perfect word-level OCR)."""
+    name = "oracle_words"
+
+    def run(self, path, rec):
+        return [{"text": w["text"], "bbox": list(w["bbox"]), "score": 1.0} for w in rec["words"]]
+
+
 ENGINES = {"tesseract": TesseractEngine, "easyocr": EasyOCREngine, "paddleocr": PaddleEngine,
-           "oracle": OracleEngine}
+           "oracle": OracleEngine, "oracle_words": WordOracleEngine}
 
 
 def make_engine(name: str, **kw):

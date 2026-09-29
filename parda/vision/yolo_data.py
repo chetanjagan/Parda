@@ -161,12 +161,13 @@ def preview(out, split="train", k=6, only_faces=True):
     return paths
 
 
-def build(data, out, n_train=12000, n_val=600, faces_dir=None, workers=4, copy=False, seed=0):
+def build(data, out, n_train=12000, n_val=600, faces_dir=None, workers=4, copy=False, seed=0, only=SPLITS):
+    """only: write just these splits, e.g. only=("bench",) for the Phase 5 evaluation (split choice unchanged)."""
     recs = read_records(data)
     splits = choose_splits(recs, n_train, n_val, seed)
     _prepare_out(out)
     by_id = {r["id"]: r for r in recs}
-    jobs = [(s, by_id[i]) for s in SPLITS for i in sorted(splits[s])]
+    jobs = [(s, by_id[i]) for s in SPLITS if s in only for i in sorted(splits[s])]
     pool = FacePool(faces_dir) if faces_dir else None  # listed once here, not once per worker
     cfg = {"data": data, "out": out, "face_files": pool.files if pool else None, "copy": copy}
     stats = {s: {"images": 0, "boxes": Counter(), "how": Counter()} for s in SPLITS}
@@ -215,11 +216,13 @@ def main(argv=None):
     ap.add_argument("--copy", action="store_true", help="copy images instead of symlinking")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--preview", type=int, default=0, help="draw boxes on N train images -> <out>/previews")
+    ap.add_argument("--only", default=",".join(SPLITS), help="comma list of splits to write, e.g. bench")
     a = ap.parse_args(argv)
     data = find_data(a.data)
-    summary = build(data, a.out, a.n_train or None, a.n_val, a.faces_dir, a.workers, a.copy, a.seed)
+    only = tuple(x for x in a.only.split(",") if x)
+    summary = build(data, a.out, a.n_train or None, a.n_val, a.faces_dir, a.workers, a.copy, a.seed, only)
     print(json.dumps(summary, indent=2), flush=True)
-    if a.preview:
+    if a.preview and "train" in only:
         for p in preview(a.out, "train", a.preview):
             print("preview:", p)
     return summary
