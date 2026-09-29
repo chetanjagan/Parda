@@ -4,8 +4,16 @@ This is the classic approach (what Presidio's Indian recognizers do). It is prec
 well-formed IDs but cannot find names or addresses, and breaks when OCR changes one character.
 """
 import re
+import unicodedata
 
 from ..synth.ids import gstin_check_char, verhoeff_valid
+
+
+def ascii_digits(s):
+    """Same length, any script's digits -> 0-9 (Python's \\d also matches e.g. Devanagari २ or Kannada ೨,
+    which OCR returns on Indic pages). Positions stay the same, so spans are unaffected."""
+    return "".join(str(unicodedata.digit(c)) if c.isdigit() and not c.isascii() and unicodedata.digit(c, None) is not None
+                   else c for c in s)
 
 _B = r"(?<![A-Za-z0-9])"   # left boundary
 _E = r"(?![A-Za-z0-9])"    # right boundary
@@ -31,11 +39,18 @@ _COMPILED = [(lab, re.compile(p), check) for lab, p, check in PATTERNS]
 
 def find_rules(text):
     """-> [{label, start, end, score}] non-overlapping (earlier patterns win ties, longer spans win)."""
+    norm = ascii_digits(text)  # same length as text, so match positions are positions in text
     cands = []
     for lab, rx, check in _COMPILED:
-        for m in rx.finditer(text):
-            if check is None or check(m.group()):
-                cands.append({"label": lab, "start": m.start(), "end": m.end(), "score": 1.0})
+        for m in rx.finditer(norm):
+            if check is not None:
+                try:
+                    ok = check(m.group())
+                except (ValueError, IndexError, KeyError):  # a malformed OCR string is simply not a valid ID
+                    ok = False
+                if not ok:
+                    continue
+            cands.append({"label": lab, "start": m.start(), "end": m.end(), "score": 1.0})
     cands.sort(key=lambda c: (c["start"], -(c["end"] - c["start"])))
     out, last_end = [], -1
     for c in cands:

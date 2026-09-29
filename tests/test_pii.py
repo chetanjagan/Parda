@@ -353,6 +353,25 @@ def test_clean_drops_broken_examples():
     assert clean(exs, "t") == [good]
 
 
+def test_rules_indic_digits_never_crash():
+    """EasyOCR returns Devanagari/Kannada digits on Indic pages; Python's \\d matches them. Found a real crash."""
+    import random as _r
+    from parda.pii.rules import ascii_digits, find_rules
+    from parda.synth.ids import aadhaar, gstin
+    rng = _r.Random(5)
+    deva = str.maketrans("0123456789", "०१२३४५६७८९")
+    knda = str.maketrans("0123456789", "೦೧೨೩೪೫೬೭೮೯")
+    g, a = gstin(rng), aadhaar(rng)
+    for table in (deva, knda):
+        text = f"GSTIN {g.translate(table)} Aadhaar {a.translate(table)}"
+        got = {s["label"]: text[s["start"]:s["end"]] for s in find_rules(text)}
+        assert got.get("GSTIN") == g.translate(table) and got.get("AADHAAR") == a.translate(table), got
+    assert ascii_digits("२९ ೩೪ 56") == "29 34 56"
+    pool = "0123456789ABCDEFZ -" + "०१२३४५६७८९" + "೦೧೨೩೪೫೬೭೮೯" + "अकಅಕ"
+    for _ in range(3000):  # OCR-like garbage: must never raise
+        find_rules("".join(rng.choice(pool) for _ in range(rng.randint(10, 40))))
+
+
 if __name__ == "__main__":
     try:
         for k, f in list(globals().items()):
