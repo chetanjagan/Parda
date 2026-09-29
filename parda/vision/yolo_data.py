@@ -77,7 +77,7 @@ _W = {}
 
 def _init(cfg):
     _W.update(cfg)
-    _W["pool"] = FacePool(cfg["faces_dir"]) if cfg.get("faces_dir") else None
+    _W["pool"] = FacePool(files=cfg["face_files"]) if cfg.get("face_files") else None
 
 
 def _link_or_copy(src, dst, copy):
@@ -167,7 +167,8 @@ def build(data, out, n_train=12000, n_val=600, faces_dir=None, workers=4, copy=F
     _prepare_out(out)
     by_id = {r["id"]: r for r in recs}
     jobs = [(s, by_id[i]) for s in SPLITS for i in sorted(splits[s])]
-    cfg = {"data": data, "out": out, "faces_dir": faces_dir, "copy": copy}
+    pool = FacePool(faces_dir) if faces_dir else None  # listed once here, not once per worker
+    cfg = {"data": data, "out": out, "face_files": pool.files if pool else None, "copy": copy}
     stats = {s: {"images": 0, "boxes": Counter(), "how": Counter()} for s in SPLITS}
     metas = {s: [] for s in SPLITS}
     faces_by_split = {s: set() for s in SPLITS}
@@ -192,7 +193,7 @@ def build(data, out, n_train=12000, n_val=600, faces_dir=None, workers=4, copy=F
     write_yaml(out)
     summary = {
         "data": data, "faces_dir": faces_dir,
-        "face_pools": FacePool(faces_dir).sizes() if faces_dir else None,
+        "face_pools": pool.sizes() if pool else None,
         "face_photos_shared_train_vs_eval": len(faces_by_split["train"] & (faces_by_split["val"] | faces_by_split["bench"])),
         "splits": {s: {"images": st["images"], "boxes": dict(st["boxes"]), "how": dict(st["how"])}
                    for s, st in stats.items()},

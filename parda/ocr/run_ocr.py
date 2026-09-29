@@ -7,7 +7,6 @@
 - Resumable: if the session dies, run again and it skips pages already done.
 """
 import argparse
-import glob
 import json
 import os
 import random
@@ -15,6 +14,7 @@ import sys
 import time
 from multiprocessing import Pool
 
+from ..fsutil import bounded_walk
 from .engines import make_engine
 
 
@@ -27,9 +27,21 @@ def _n_images(d):
     return len(os.listdir(p)) if os.path.isdir(p) else 0
 
 
+def _find_files(root, want):
+    """Folders under root holding a file for which want(name) is true. Never lists huge folders fully
+    (a 200k-photo dataset attached next to ours used to make this take 10+ minutes)."""
+    hits = []
+    for d, files, subdirs, _ in bounded_walk(root):
+        found = [f for f in files if want(f)]
+        hits += [os.path.join(d, f) for f in found]
+        if "annotations.jsonl" in files:
+            subdirs[:] = []  # a Parda dataset: nothing more to find inside it
+    return hits
+
+
 def _candidates():
-    found = glob.glob(os.path.join(INPUT_ROOT, "**", "annotations.jsonl"), recursive=True)
-    found += glob.glob(os.path.join(EXTRACT_TO, "**", "annotations.jsonl"), recursive=True)
+    found = _find_files(INPUT_ROOT, lambda f: f == "annotations.jsonl")
+    found += _find_files(EXTRACT_TO, lambda f: f == "annotations.jsonl")
     dirs = [os.path.dirname(p) for p in found]
     dirs += [d for d in ("data/synth", "/kaggle/working/parda_synth_v1")
              if os.path.isfile(os.path.join(d, "annotations.jsonl"))]
@@ -47,7 +59,7 @@ def find_data(data=None, verbose=True):
         return data
     dirs = _candidates()
     if not dirs:  # maybe the dataset is still a zip
-        zips = sorted(glob.glob(os.path.join(INPUT_ROOT, "**", "*.zip"), recursive=True), key=os.path.getsize)
+        zips = sorted(_find_files(INPUT_ROOT, lambda f: f.lower().endswith(".zip")), key=os.path.getsize)
         if zips:
             import zipfile
             z = zips[-1]  # largest zip

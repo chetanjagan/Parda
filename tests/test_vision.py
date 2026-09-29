@@ -19,7 +19,8 @@ from parda.ocr.run_ocr import benchmark_ids  # noqa: E402
 from parda.vision.classes import CLASSES  # noqa: E402
 from parda.vision.detectors import label_path  # noqa: E402
 from parda.vision.evaluate_vis import ap50, evaluate, iou  # noqa: E402
-from parda.vision.faces import FacePool, find_faces_dir  # noqa: E402
+from parda.fsutil import bounded_walk  # noqa: E402
+from parda.vision.faces import FacePool, find_faces_dir, list_face_files  # noqa: E402
 from parda.vision.yolo_data import build, read_records, yolo_lines  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="parda_vis_test_")
@@ -202,6 +203,55 @@ def test_opencv_baseline_and_cli():
     assert cv["ap50"]["SIGNATURE"] in (None, 0.0) and cv["by_class"]["STAMP"]["detected"] in (None, 0.0)
     md = open(os.path.join(out, "report_vis.md"), encoding="utf-8").read()
     assert "| opencv |" in md and "| gold |" in md and "## By class" in md
+
+
+def test_bounded_walk_never_reads_big_folders_fully():
+    root = os.path.join(TMP, "walk")
+    big = os.path.join(root, "a", "big")
+    os.makedirs(os.path.join(big, "inside_big"), exist_ok=True)
+    os.makedirs(os.path.join(root, "a", "small", "deeper"), exist_ok=True)
+    for i in range(120):
+        open(os.path.join(big, f"{i}.jpg"), "w").close()
+    seen = {os.path.relpath(d, root): (len(files), trunc) for d, files, _, trunc in bounded_walk(root, max_entries=50)}
+    assert seen[os.path.join("a", "big")] == (50, True)          # stopped after 50 names
+    assert os.path.join("a", "big", "inside_big") not in seen    # and not descended into
+    assert os.path.join("a", "small", "deeper") in seen
+
+
+def test_find_faces_dir_big_folder_without_full_listing():
+    # 80 photos but only 50 names may be read: still recognised as the (big) face folder
+    assert find_faces_dir(os.path.join(TMP, "input"), min_images=10, max_entries=50) == _faces()
+
+
+def test_face_list_from_celeba_csv():
+    top = os.path.join(TMP, "celeba_like", "celeba-dataset")
+    d = os.path.join(top, "img_align_celeba", "img_align_celeba")
+    os.makedirs(d, exist_ok=True)
+    for i in range(1, 13):
+        Image.new("RGB", (20, 25), (i * 10, 50, 50)).save(os.path.join(d, f"{i:06d}.jpg"))
+    assert [os.path.basename(f) for f in list_face_files(d)] == [f"{i:06d}.jpg" for i in range(1, 13)]  # listing
+    with open(os.path.join(top, "list_eval_partition.csv"), "w") as f:  # CelebA layout: CSV two levels up
+        f.write("image_id,partition\n" + "".join(f"{i:06d}.jpg,0\n" for i in (3, 1, 2)))
+    assert list_face_files(d) == [os.path.join(d, f"{i:06d}.jpg") for i in (1, 2, 3)]   # from the CSV, sorted
+    assert list_face_files(d, max_faces=2) == [os.path.join(d, f"{i:06d}.jpg") for i in (1, 2)]
+    open(os.path.join(top, "list_eval_partition.csv"), "a").write("999999.jpg,0\n")  # CSV names a missing file
+    assert len(list_face_files(d)) == 12                                                 # -> falls back to listing
+    pool = FacePool(files=list_face_files(d))
+    assert set(pool.train) | set(pool.heldout) == set(pool.files)
+
+
+def test_find_data_ignores_big_neighbour_folder():
+    import parda.ocr.run_ocr as R
+    old = R.INPUT_ROOT, R.EXTRACT_TO
+    try:
+        R.INPUT_ROOT, R.EXTRACT_TO = os.path.join(TMP, "input"), os.path.join(TMP, "no_extract")
+        _faces()
+        link = os.path.join(TMP, "input", "parda_synth")
+        if not os.path.exists(link):
+            shutil.copytree(_data(), link)
+        assert R.find_data(verbose=False) == link
+    finally:
+        R.INPUT_ROOT, R.EXTRACT_TO = old
 
 
 _FAKE_ULTRA = r'''
