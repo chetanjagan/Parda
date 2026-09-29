@@ -94,6 +94,21 @@ Fine-tuned on 25,028 clean + OCR-noisy examples in 54 min on one free Kaggle T4.
 Biggest gains: person names 39% → 82%, MRN 38% → 89%, Kannada 51% → 76%.
 Remaining gaps (address 27%, employee ID 24%) come mainly from OCR and are addressed in Phase 5.
 
+
+### Phase 4: visual PII detector (YOLO11n)
+
+Held-out benchmark: the same 300 pages, 600 visual PII boxes. Faces are real photos from a held-out pool never seen in training.
+
+| System                            | Fully redacted | Precision      | mAP50          | Speed                  |
+| --------------------------------- | -------------- | -------------- | -------------- | ---------------------- |
+| OpenCV (Haar faces + QR detector) | 7.2%           | 17.9%          | 18.9%          | 0.21 s/page            |
+| **YOLO11n, fine-tuned**     | **100%** | **100%** | **100%** | **0.035 s/page** |
+
+Faces 0% → 100%, signatures 0.6% → 100%, stamps 0% → 100%, QR codes 97.6% → 100%.
+Trained on 12,000 pages in 177 min on one T4. The Phase 1 cartoon ID photos were replaced with real face photos (CelebA)
+so the detector works on real faces. Scores saturate on synthetic templates; real-scan performance is tested in Phase 5.
+Results: `results/phase4/`.
+
 ## Labels
 
 Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID PASSPORT VEHICLE_REG UAN ABHA EMPLOYEE_ID MRN`
