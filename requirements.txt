@@ -11,4 +11,6 @@ matplotlib
 # --- Phase 3: PII model (GPU, installed in the notebook) ---
 # gliner
 # --- later phases ---
-# ultralytics, transformers, datasets, onnxruntime, wandb, huggingface_hub
+ultralytics>=8.2.0
+huggingface_hub
+# transformers, datasets, onnxruntime, wandb

@@ -1,0 +1,152 @@
+{
+  "split": "bench",
+  "pages": 300,
+  "pad": 6,
+  "cover": 0.95,
+  "systems": [
+    {
+      "fully_redacted": 0.07166666666666667,
+      "detected": 0.07,
+      "precision": 0.1794871794871795,
+      "over_redaction": 0.3542977757194281,
+      "n_true": 600,
+      "n_pred": 234,
+      "by_class": {
+        "FACE": {
+          "n": 171,
+          "fully_redacted": 0.0,
+          "detected": 0.005847953216374269,
+          "precision": 0.005649717514124294
+        },
+        "SIGNATURE": {
+          "n": 326,
+          "fully_redacted": 0.006134969325153374,
+          "detected": 0.0,
+          "precision": null
+        },
+        "QR_CODE": {
+          "n": 42,
+          "fully_redacted": 0.9761904761904762,
+          "detected": 0.9761904761904762,
+          "precision": 0.7192982456140351
+        },
+        "STAMP": {
+          "n": 61,
+          "fully_redacted": 0.0,
+          "detected": 0.0,
+          "precision": null
+        }
+      },
+      "by_lang": {
+        "en": 0.06280193236714976,
+        "hi-en": 0.08247422680412371,
+        "kn-en": 0.07035175879396985
+      },
+      "system": "opencv",
+      "ap50": {
+        "FACE": 8.99685110211426e-05,
+        "SIGNATURE": 0.0,
+        "QR_CODE": 0.7562368378028217,
+        "STAMP": 0.0
+      },
+      "map50": 0.18908170157846071,
+      "sec_per_page": 0.2068989340464274
+    },
+    {
+      "fully_redacted": 1.0,
+      "detected": 1.0,
+      "precision": 1.0,
+      "over_redaction": 0.15358769282706064,
+      "n_true": 600,
+      "n_pred": 600,
+      "by_class": {
+        "FACE": {
+          "n": 171,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        },
+        "SIGNATURE": {
+          "n": 326,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        },
+        "QR_CODE": {
+          "n": 42,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        },
+        "STAMP": {
+          "n": 61,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        }
+      },
+      "by_lang": {
+        "en": 1.0,
+        "hi-en": 1.0,
+        "kn-en": 1.0
+      },
+      "system": "yolo@0.25",
+      "ap50": {
+        "FACE": 1.0,
+        "SIGNATURE": 1.0,
+        "QR_CODE": 1.0,
+        "STAMP": 1.0
+      },
+      "map50": 1.0,
+      "sec_per_page": 0.03475694338480632
+    },
+    {
+      "fully_redacted": 1.0,
+      "detected": 1.0,
+      "precision": 1.0,
+      "over_redaction": 0.15358769282706064,
+      "n_true": 600,
+      "n_pred": 600,
+      "by_class": {
+        "FACE": {
+          "n": 171,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        },
+        "SIGNATURE": {
+          "n": 326,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        },
+        "QR_CODE": {
+          "n": 42,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        },
+        "STAMP": {
+          "n": 61,
+          "fully_redacted": 1.0,
+          "detected": 1.0,
+          "precision": 1.0
+        }
+      },
+      "by_lang": {
+        "en": 1.0,
+        "hi-en": 1.0,
+        "kn-en": 1.0
+      },
+      "system": "yolo@0.5",
+      "ap50": {
+        "FACE": 1.0,
+        "SIGNATURE": 1.0,
+        "QR_CODE": 1.0,
+        "STAMP": 1.0
+      },
+      "map50": 1.0,
+      "sec_per_page": 0.03475694338480632
+    }
+  ]
+}

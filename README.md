@@ -9,10 +9,12 @@ signatures and QR codes. It runs fully offline in the browser.
 
 ## Status
 
-- [x] **Phase 1 — Synthetic document generator** (30,000 docs, 0 errors)
-- [x] **Phase 2 — OCR benchmark** (Tesseract / EasyOCR / PaddleOCR on English, Hindi, Kannada)
-- [x] **Phase 3 — Text PII model** (GLiNER fine-tuned on clean + noisy-OCR text, rules baseline)
-- [ ] Phase 4 — Visual PII detector (faces, signatures, QR, stamps)
+- [X] **Phase 1 — Synthetic document generator** (30,000 docs, 0 errors)
+- [X] **Phase 2 — OCR benchmark** (Tesseract / EasyOCR / PaddleOCR on English, Hindi, Kannada)
+- [X] **Phase 3 — Text PII model** (GLiNER fine-tuned on clean + noisy-OCR text, rules baseline)
+
+- [X] **Phase 4 — Visual PII detector** (YOLO11n: 7.2% → 100% of visual PII fully redacted vs OpenCV)
+
 - [ ] Phase 5 — Fusion, evaluation benchmark
 - [ ] Phase 6 — ONNX/INT8 in-browser inference + web UI
 
@@ -62,6 +64,7 @@ python -m parda.ocr.run_ocr --engine tesseract --per_lang 100 --workers 4 --out 
 python -m parda.ocr.run_ocr --engine easyocr   --per_lang 100 --out outputs/ocr_bench
 python -m parda.ocr.evaluate --out outputs/ocr_bench
 ```
+
 Key metric: **PII exact**, the share of personal-data items OCR reads perfectly. Redaction can only
 hide what OCR can read, so this is the ceiling for the whole system. Results: `results/phase2/`.
 
@@ -78,12 +81,13 @@ python -m parda.pii.train_gliner --data_dir data/gliner --out outputs/gliner --s
 python -m parda.pii.train_gliner --data_dir data/gliner --out outputs/gliner --epochs 1
 python -m parda.pii.evaluate_pii --ocr outputs/bench/ocr_tesseract.jsonl --ft outputs/gliner/final
 ```
+
 Results: `results/phase3/`.
 
-| System (300 held-out scanned pages) | Fully redacted | Over-redaction | en | hi-en | kn-en |
-|---|---|---|---|---|---|
-| Rules only | 21.4% | 7.6% | 26.1% | 15.1% | 23.4% |
-| Off-the-shelf GLiNER + rules | 60.0% | 29.1% | 66.9% | 62.3% | 51.4% |
+| System (300 held-out scanned pages)        | Fully redacted  | Over-redaction  | en              | hi-en           | kn-en           |
+| ------------------------------------------ | --------------- | --------------- | --------------- | --------------- | --------------- |
+| Rules only                                 | 21.4%           | 7.6%            | 26.1%           | 15.1%           | 23.4%           |
+| Off-the-shelf GLiNER + rules               | 60.0%           | 29.1%           | 66.9%           | 62.3%           | 51.4%           |
 | **Fine-tuned GLiNER (this project)** | **80.4%** | **10.4%** | **79.7%** | **85.5%** | **76.0%** |
 
 Fine-tuned on 25,028 clean + OCR-noisy examples in 54 min on one free Kaggle T4.
@@ -92,8 +96,7 @@ Remaining gaps (address 27%, employee ID 24%) come mainly from OCR and are addre
 
 ## Labels
 
-Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID
-PASSPORT VEHICLE_REG UAN ABHA EMPLOYEE_ID MRN`
+Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID PASSPORT VEHICLE_REG UAN ABHA EMPLOYEE_ID MRN`
 
 Visual: `FACE SIGNATURE QR_CODE STAMP`
 

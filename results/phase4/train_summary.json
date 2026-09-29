@@ -1,0 +1,22 @@
+{
+  "model": "yolo11n.pt",
+  "imgsz": 1024,
+  "batch": 16,
+  "smoke": false,
+  "epochs_run": 49,
+  "minutes": 176.6,
+  "sec_per_epoch": 216.2,
+  "best_epoch": 39.0,
+  "best_val_map50": 0.995,
+  "best_val_map50_95": 0.995,
+  "last_val_map50": 0.995,
+  "first_box_loss": 0.69759,
+  "last_box_loss": 0.15401,
+  "nan_loss": false,
+  "val_ap50_by_class": {
+    "FACE": 0.995,
+    "SIGNATURE": 0.995,
+    "QR_CODE": 0.995,
+    "STAMP": 0.995
+  }
+}

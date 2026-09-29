@@ -1,0 +1,50 @@
+{
+  "data": "/kaggle/input/notebooks/chetanjagan/parda/parda_synth_v1",
+  "faces_dir": "/kaggle/input/datasets/jessicali9530/celeba-dataset/img_align_celeba/img_align_celeba",
+  "face_pools": {
+    "train_pool": 27049,
+    "heldout_pool": 2951
+  },
+  "face_photos_shared_train_vs_eval": 0,
+  "splits": {
+    "train": {
+      "images": 12000,
+      "boxes": {
+        "FACE": 5524,
+        "SIGNATURE": 14824,
+        "QR_CODE": 1823,
+        "STAMP": 3255
+      },
+      "how": {
+        "face_swapped": 5524,
+        "linked": 6476
+      }
+    },
+    "val": {
+      "images": 600,
+      "boxes": {
+        "SIGNATURE": 638,
+        "STAMP": 130,
+        "FACE": 345,
+        "QR_CODE": 87
+      },
+      "how": {
+        "linked": 255,
+        "face_swapped": 345
+      }
+    },
+    "bench": {
+      "images": 300,
+      "boxes": {
+        "FACE": 171,
+        "SIGNATURE": 326,
+        "QR_CODE": 42,
+        "STAMP": 61
+      },
+      "how": {
+        "face_swapped": 171,
+        "linked": 129
+      }
+    }
+  }
+}

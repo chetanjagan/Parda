@@ -59,7 +59,9 @@ def _per_class_ap50(metrics):
 def summarise(run_dir, minutes, a, metrics=None):
     rows = read_results_csv(os.path.join(run_dir, "results.csv"))
     key = "metrics/mAP50(B)"
-    best = max(rows, key=lambda r: r.get(key, -1)) if rows else {}
+    # same rule ultralytics uses to pick best.pt: 0.1*mAP50 + 0.9*mAP50-95 (mAP50 alone saturates and ties)
+    fit = lambda r: 0.1 * r.get(key, 0.0) + 0.9 * r.get("metrics/mAP50-95(B)", 0.0)  # noqa: E731
+    best = max(rows, key=fit) if rows else {}
     last = rows[-1] if rows else {}
     losses = [r.get("train/box_loss") for r in rows if isinstance(r.get("train/box_loss"), float)]
     return {
