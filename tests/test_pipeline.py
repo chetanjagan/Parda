@@ -171,10 +171,13 @@ def test_redact_cli_image_multipage_and_audit():
 
 def test_redact_cli_pdf_input_if_pymupdf():
     try:
-        import fitz  # noqa: F401
+        import pymupdf  # noqa: F401
     except ImportError:
-        print("   (skipped: pymupdf not installed)")
-        return
+        try:
+            import fitz  # noqa: F401
+        except ImportError:
+            print("   (skipped: pymupdf not installed)")
+            return
     page = _pages()[0]
     pdf_in = os.path.join(TMP, "scan.pdf")
     Image.open(page["path"]).convert("RGB").save(pdf_in, resolution=100)
@@ -219,7 +222,8 @@ class YOLO:
             xyxy, cls, lines = [], [], []
             if os.sep + "images" + os.sep in p:
                 head, tail = p.rsplit(os.sep + "images" + os.sep, 1)
-                lines = open(os.path.join(head, "labels", os.path.splitext(tail)[0] + ".txt")).read().split("\n")
+                lp = os.path.join(head, "labels", os.path.splitext(tail)[0] + ".txt")
+                lines = open(lp).read().split("\n") if os.path.exists(lp) else []
             for ln in (l for l in lines if l.strip()):
                 c, cx, cy, w, h = ln.split()
                 cx, cy, w, h = float(cx) * W, float(cy) * H, float(w) * W, float(h) * H

@@ -16,7 +16,7 @@ import os
 import tempfile
 from collections import Counter
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from ..ocr.engines import make_engine
 from ..pii.predict import GLiNERPredictor, RulesPredictor, UnionPredictor
@@ -25,16 +25,25 @@ from .models import gliner as load_gliner_model
 from .models import yolo_weights
 from .redactor import Redactor, audit_entry
 
-IMAGE_EXT = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp")
+IMAGE_EXT = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif")
+
+try:  # iPhone photos (.heic): pip install pillow-heif
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass
 
 
 def load_pages(path, dpi=200):
     """-> list of RGB PIL images (one per page)."""
     if path.lower().endswith(".pdf"):
         try:
-            import fitz  # PyMuPDF
+            import pymupdf as fitz  # PyMuPDF >= 1.24
         except ImportError:
-            raise SystemExit("PDF input needs PyMuPDF: pip install pymupdf")
+            try:
+                import fitz  # older PyMuPDF
+            except ImportError:
+                raise SystemExit("PDF input needs PyMuPDF: pip install pymupdf")
         pages = []
         with fitz.open(path) as doc:
             for page in doc:
@@ -42,9 +51,15 @@ def load_pages(path, dpi=200):
                 pages.append(Image.frombytes("RGB", (pm.width, pm.height), pm.samples))
         return pages
     if path.lower().endswith(IMAGE_EXT):
-        img = Image.open(path)
+        try:
+            img = Image.open(path)
+        except Exception as e:  # e.g. .heic without pillow-heif
+            raise SystemExit(f"cannot open {path} ({e}). For iPhone .heic photos: pip install pillow-heif")
+        n = getattr(img, "n_frames", 1)
+        if n == 1:  # phone photos store their rotation in EXIF
+            return [ImageOps.exif_transpose(img).convert("RGB")]
         pages = []
-        for i in range(getattr(img, "n_frames", 1)):  # multi-page TIFF
+        for i in range(n):  # multi-page TIFF
             img.seek(i)
             pages.append(img.convert("RGB"))
         return pages

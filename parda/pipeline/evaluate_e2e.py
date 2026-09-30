@@ -230,7 +230,8 @@ def _pct(v):
 
 def report_md(res):
     rows = res["configs"]
-    L = [f"# Phase 5 — end-to-end redaction on {res['pages']} benchmark pages", "",
+    title = res.get("title") or "Phase 5 — end-to-end redaction"
+    L = [f"# {title} ({res['pages']} pages)", "",
          f"Scored on the black boxes actually drawn. Text PII item = every word ≥{int(100 * res['cover_word'])}% "
          f"blacked out; visual item = ≥{int(100 * res['cover_visual'])}% of its box. Page clean = nothing leaks. "
          "Each row adds one component to the row above.", "",
@@ -265,6 +266,7 @@ def main(argv=None):
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--title", default=None, help="report heading, e.g. 'Unseen layouts + phone photos'")
     a = ap.parse_args(argv)
     from ..pii.predict import GLiNERPredictor, RulesPredictor, UnionPredictor
     from .models import gliner, yolo_weights
@@ -281,6 +283,7 @@ def main(argv=None):
         visual = YoloDetector(yolo_weights(a.yolo), conf=0.05)
     engines = {n: n for n in a.ocr.split(",") if n}
     res = evaluate(pages, engines, text_systems, visual, CONFIGS, a.cache, a.workers)
+    res["title"] = a.title
     os.makedirs(a.out, exist_ok=True)
     json.dump(res, open(os.path.join(a.out, "report_e2e.json"), "w"), indent=2)
     md = report_md(res)
