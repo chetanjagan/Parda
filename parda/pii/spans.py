@@ -187,14 +187,21 @@ def transfer_labels_lines(rec, segs, min_overlap=0.5):
     words, rtext = rec["words"], rec["text"]
     grid = _Grid([s["bbox"] for s in ordered])
     seg_words = [[] for _ in ordered]
+    seg_loose = [loose(s["text"]) for s in ordered]
     for wi, w in enumerate(words):
-        best, best_ov = None, 0.0
+        cands = []
         for si in grid.query(w["bbox"]):
             ov = _inter(w["bbox"], ordered[si]["bbox"]) / _area(w["bbox"])
-            if ov > best_ov:
-                best, best_ov = si, ov
-        if best is not None and best_ov >= min_overlap:
-            seg_words[best].append(wi)
+            if ov >= 0.3:
+                cands.append((ov, si))
+        if not cands:
+            continue
+        # tilted pages: a word can overlap two neighbouring line boxes -> prefer the line that contains it
+        lw = loose(w["text"])
+        has = [c for c in cands if lw and lw in seg_loose[c[1]]]
+        ov, si = max(has or cands)
+        if has or ov >= min_overlap:
+            seg_words[si].append(wi)
     char_ent = {}
     for ei, e in enumerate(rec["entities"]):
         for c in range(e["start"], e["end"]):
