@@ -154,6 +154,100 @@ def _area(b):
     return max(1, (b[2] - b[0]) * (b[3] - b[1]))
 
 
+def _snap(t, a, b):
+    """Grow [a, b) in string t to whole whitespace-separated tokens."""
+    while a > 0 and not t[a - 1].isspace():
+        a -= 1
+    while b < len(t) and not t[b].isspace():
+        b += 1
+    return a, b
+
+
+def _trim(t, a, b, gt):
+    """Drop punctuation glued to the outer edges ("Bhat," -> "Bhat", "(ICIC0740688)" -> "ICIC0740688")
+    unless the true value itself has it."""
+    while b > a and t[b - 1] in ",;:)]}\"'" and not gt.endswith(t[b - 1]):
+        b -= 1
+    while a < b and t[a] in "([{\"'" and not gt.startswith(t[a]):
+        a += 1
+    if b > a and t[b - 1] == "." and not gt.endswith("."):
+        b -= 1
+    return a, b
+
+
+def transfer_labels_lines(rec, segs, min_overlap=0.5):
+    """Like transfer_labels, for LINE-level OCR (EasyOCR returns "Name: Ravi Kumar" as one segment).
+
+    Geometry can't split a line into words exactly, so: (1) each true word is assigned to the OCR line that
+    covers most of it, (2) the OCR line text is aligned character-by-character with the true text of its
+    words (a diff), (3) every entity's characters are carried across the alignment. Label boundaries stay
+    exact even when OCR misreads letters. Returns (text, gold, missed) like transfer_labels."""
+    import difflib
+    text, ordered, offs = build_ocr_text(segs)
+    words, rtext = rec["words"], rec["text"]
+    grid = _Grid([s["bbox"] for s in ordered])
+    seg_words = [[] for _ in ordered]
+    for wi, w in enumerate(words):
+        best, best_ov = None, 0.0
+        for si in grid.query(w["bbox"]):
+            ov = _inter(w["bbox"], ordered[si]["bbox"]) / _area(w["bbox"])
+            if ov > best_ov:
+                best, best_ov = si, ov
+        if best is not None and best_ov >= min_overlap:
+            seg_words[best].append(wi)
+    char_ent = {}
+    for ei, e in enumerate(rec["entities"]):
+        for c in range(e["start"], e["end"]):
+            char_ent[c] = ei
+    pieces = {}  # entity -> [(start, end) in text]
+    for si, wis in enumerate(seg_words):
+        if not wis:
+            continue
+        wis.sort(key=lambda i: words[i]["start"])
+        tchars, tpos = [], []  # true line text + its offset in rec["text"]
+        for k, wi in enumerate(wis):
+            if k:
+                tchars.append(" ")
+                tpos.append(None)
+            for c in range(words[wi]["start"], words[wi]["end"]):
+                tchars.append(rtext[c])
+                tpos.append(c)
+        a0 = offs[si][0]
+        ocr = text[a0:offs[si][1]]
+        t2o = [None] * len(tchars)
+        for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, "".join(tchars), ocr, autojunk=False).get_opcodes():
+            if tag in ("equal", "replace"):
+                for k in range(i2 - i1):  # replace blocks: spread proportionally
+                    t2o[i1 + k] = j1 + min(j2 - j1 - 1, int(k * (j2 - j1) / max(1, i2 - i1)))
+        by_ent = {}
+        for ti, rc in enumerate(tpos):
+            if rc is not None and rc in char_ent and t2o[ti] is not None:
+                by_ent.setdefault(char_ent[rc], []).append(t2o[ti])
+        for ei, pos in by_ent.items():
+            a, b = _snap(ocr, min(pos), max(pos) + 1)
+            pieces.setdefault(ei, []).append((a0 + a, a0 + b))
+    gold = []
+    for ei, ps in sorted(pieces.items()):
+        ps.sort()
+        merged = [list(ps[0])]
+        for a, b in ps[1:]:
+            if text[merged[-1][1]:a].strip() == "":  # only whitespace / line break between -> one span
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        e = rec["entities"][ei]
+        for a, b in merged:
+            a, b = _trim(text, a, b, e["text"])  # after merging: only the outer edges
+            ocr_txt = text[a:b]
+            la, lb = loose(e["text"]), loose(ocr_txt)
+            gold.append({"label": e["label"], "start": a, "end": b, "gt": e["text"], "ocr": ocr_txt,
+                         "cer": min(1.0, levenshtein(la, lb) / max(1, len(la))), "entity": ei})
+    gold.sort(key=lambda g: g["start"])
+    found = {g["entity"] for g in gold}
+    missed = [dict(e, entity=ei) for ei, e in enumerate(rec["entities"]) if ei not in found]
+    return text, gold, missed
+
+
 def transfer_labels(rec, segs, min_overlap=0.5):
     """Map true PII entities onto an OCR reading of the page.
 

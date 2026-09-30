@@ -1,15 +1,19 @@
 """Build GLiNER training data.
 
   python -m parda.pii.build_data --ocr /kaggle/input/.../ocr_train/ocr_tesseract.jsonl --clean_docs 10000 --out data/gliner
+  # v2: several OCR sources, each on its own pages (same document ids as the Phase 1 data)
+  python -m parda.pii.build_data --noisy tess_scan=<synth>:<ocr.jsonl> --noisy tess_photo=<photo pages>:<ocr.jsonl> \
+         --noisy easy_photo=<photo pages>:<ocr.jsonl>:lines --clean_docs 10000 --out data/gliner_v2
 
 Two kinds of examples:
   clean  the perfect page text from Phase 1 (teaches what PII looks like)
-  noisy  Tesseract's reading of the page with labels transferred by position
+  noisy  an OCR reading of the page with labels transferred onto it
          (teaches PII with real OCR mistakes: 'SBINO364507' is still an IFSC)
-The 300 benchmark pages are never used. Train/val split is by document.
+         word-level OCR (Tesseract): by position; line-level OCR (EasyOCR, ':lines'): by text alignment
+The 300 benchmark pages are never used. Train/val split is by document id, the same for every source, so a
+validation document is never trained on in any form.
 """
 import argparse
-import glob
 import json
 import os
 import random
@@ -19,7 +23,7 @@ from multiprocessing import Pool
 
 from ..ocr.run_ocr import benchmark_ids, find_data
 from .labels import LABELS
-from .spans import char_spans_to_token_ner, chunk_examples, tokenize, transfer_labels
+from .spans import char_spans_to_token_ner, chunk_examples, tokenize, transfer_labels, transfer_labels_lines
 
 _CFG = {}
 
@@ -38,9 +42,11 @@ def clean_examples(rec, window, stride):
     return chunk_examples(toks, char_spans_to_token_ner(toks, spans), window, stride)
 
 
-def noisy_examples(rec, segs, window, stride, max_cer):
-    text, gold, missed = transfer_labels(rec, segs)
+def noisy_examples(rec, segs, window, stride, max_cer, lines=False):
+    text, gold, missed = (transfer_labels_lines if lines else transfer_labels)(rec, segs)
     toks = tokenize(text)
+    if not toks:  # OCR read nothing on this page: no example (an empty example would only add noise)
+        return [], {"gold": 0, "missed": len(missed), "bad": 0, "cer_sum": 0.0, "empty": 1}
     spans = [{"label": LABELS[g["label"]], "start": g["start"], "end": g["end"]} for g in gold]
     exs = chunk_examples(toks, char_spans_to_token_ner(toks, spans), window, stride)
     # drop windows containing an unreadable entity (label would teach 'garbage = PII')
@@ -67,7 +73,7 @@ def _noisy_worker(args):
     rec, ocr = json.loads(rec_line), json.loads(ocr_line)
     if ocr.get("error"):
         return rec["id"], [], None
-    exs, st = noisy_examples(rec, ocr["segments"], _CFG["window"], _CFG["stride"], _CFG["max_cer"])
+    exs, st = noisy_examples(rec, ocr["segments"], _CFG["window"], _CFG["stride"], _CFG["max_cer"], _CFG["lines"])
     return rec["id"], exs, st
 
 
@@ -92,15 +98,30 @@ def _index_annotations(path):
     return idx
 
 
-def find_ocr_train():
-    hits = glob.glob("/kaggle/input/**/ocr_train/ocr_tesseract.jsonl", recursive=True)
+def find_ocr_train(root=None):
+    from ..fsutil import find_path  # never lists a huge neighbour folder (e.g. 200k face photos) in full
+    from ..ocr import run_ocr
+    hits = find_path(root or run_ocr.INPUT_ROOT, "ocr_train/ocr_tesseract.jsonl")
     return hits[0] if hits else None
+
+
+def parse_noisy(spec, default_data):
+    """'name=DATA_DIR:OCR_FILE[:lines]' or 'name=OCR_FILE[:lines]' (pages of --data)."""
+    name, rest = spec.split("=", 1)
+    parts = rest.split(":")
+    lines = parts[-1] == "lines"
+    if lines:
+        parts = parts[:-1]
+    data, ocr = (parts[0], parts[1]) if len(parts) == 2 else (default_data, parts[0])
+    return name, data, ocr, lines
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=None)
     ap.add_argument("--ocr", default=None, help="Tesseract output for training pages (Phase 3a)")
+    ap.add_argument("--noisy", action="append", default=[],
+                    help="name=DATA_DIR:OCR_FILE[:lines] (repeatable); ':lines' for line-level OCR like EasyOCR")
     ap.add_argument("--clean_docs", type=int, default=10000)
     ap.add_argument("--out", default="data/gliner")
     ap.add_argument("--window", type=int, default=200)
@@ -112,7 +133,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
 
     data = find_data(a.data)
-    ocr_path = a.ocr or find_ocr_train()
+    sources = [parse_noisy(sp, data) for sp in a.noisy]
+    if not sources:  # Phase 3 behaviour: one Tesseract file on the Phase 1 pages
+        ocr_path = a.ocr or find_ocr_train()
+        if ocr_path and os.path.exists(ocr_path):
+            sources = [("noisy", data, ocr_path, False)]
+        else:
+            print("WARNING: no OCR training file found -> building clean examples only")
     ann = os.path.join(data, "annotations.jsonl")
     bench = benchmark_ids(data)
     idx = _index_annotations(ann)
@@ -130,30 +157,31 @@ def main(argv=None):
                 label_counts[(kind, lab)] += 1
         stats[f"{kind}_docs"] += 1
 
-    # ---- noisy (OCR) examples
-    if ocr_path and os.path.exists(ocr_path):
+    # ---- noisy (OCR) examples, one pass per source
+    for kind, sdata, ocr_path, lines in sources:
+        s_ann = os.path.join(sdata, "annotations.jsonl")
+        s_idx = idx if os.path.abspath(sdata) == os.path.abspath(data) else _index_annotations(s_ann)
         jobs = []
-        with open(ann, "rb") as fa, open(ocr_path, encoding="utf-8") as fo:
+        with open(s_ann, "rb") as fa, open(ocr_path, encoding="utf-8") as fo:
             for line in fo:
                 if not line.strip():
                     continue
                 doc_id = json.loads(line)["id"]
-                if doc_id in bench or doc_id not in idx:
-                    stats["ocr_skipped"] += 1
+                if doc_id in bench or doc_id not in s_idx:  # the Phase 1 benchmark ids, for every source
+                    stats[f"{kind}_skipped"] += 1
                     continue
-                fa.seek(idx[doc_id])
+                fa.seek(s_idx[doc_id])
                 jobs.append((fa.readline().decode("utf-8"), line))
-        cfg = dict(window=a.window, stride=a.stride, max_cer=a.max_cer)
+        cfg = dict(window=a.window, stride=a.stride, max_cer=a.max_cer, lines=lines)
         with Pool(a.workers, initializer=_init, initargs=(cfg,)) as pool:
             for doc_id, exs, st in pool.imap_unordered(_noisy_worker, jobs, chunksize=16):
                 if st is None:
-                    stats["ocr_error_pages"] += 1
+                    stats[f"{kind}_error_pages"] += 1
                     continue
-                add(doc_id, exs, "noisy")
+                add(doc_id, exs, kind)
                 for k, v in st.items():
                     stats[f"noisy_{k}"] += v
-    else:
-        print("WARNING: no OCR training file found -> building clean examples only")
+                    stats[f"{kind}_{k}"] += v
 
     # ---- clean examples (random non-benchmark docs)
     rng = random.Random(a.seed)
@@ -173,7 +201,9 @@ def main(argv=None):
         "train_examples": len(train), "val_examples": len(val),
         "train_by_source": Counter(e["source"] for e in train),
         "docs": {k: v for k, v in stats.items() if k.endswith("_docs")},
-        "ocr_file": ocr_path,
+        "ocr_sources": [{"name": k, "data": d, "ocr": o, "mode": "lines" if ln else "words"} for k, d, o, ln in sources],
+        "transfer_by_source": {k: {"transferred": stats.get(f"{k}_gold", 0), "missed": stats.get(f"{k}_missed", 0),
+                                   "unreadable_dropped": stats.get(f"{k}_bad", 0)} for k, _, _, _ in sources},
         "noisy_label_transfer": {
             "entities_transferred": n_gold,
             "entities_ocr_missed": stats.get("noisy_missed", 0),

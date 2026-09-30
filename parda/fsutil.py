@@ -37,3 +37,12 @@ def bounded_walk(root, max_entries=2000, max_depth=8):
         yield d, files, subdirs, truncated
         if not truncated and depth < max_depth:
             stack.extend((os.path.join(d, s), depth + 1) for s in reversed(subdirs))
+
+
+def find_path(root, rel, max_entries=2000, max_depth=8):
+    """All paths root/**/rel (rel may contain '/'), without ever listing a huge folder in full."""
+    hits = []
+    for d, files, subdirs, _ in bounded_walk(root, max_entries, max_depth):
+        if os.path.exists(os.path.join(d, rel)):
+            hits.append(os.path.join(d, rel))
+    return sorted(hits)
