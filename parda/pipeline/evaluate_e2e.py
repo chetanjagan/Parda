@@ -39,6 +39,7 @@ CONFIGS = [
     ("+ gap fill", ("tesseract",), "ft+rules", True, False),
     ("+ EasyOCR (best of both)", ("tesseract", "easyocr"), "ft+rules", True, False),
     ("+ YOLO visual = Parda", ("*",), "ft+rules", True, True),  # "*" = every OCR engine given
+    ("browser build: Tesseract only + YOLO", ("tesseract",), "ft+rules", True, True),  # no EasyOCR in a browser
 ]
 
 
@@ -234,7 +235,7 @@ def report_md(res):
     L = [f"# {title} ({res['pages']} pages)", "",
          f"Scored on the black boxes actually drawn. Text PII item = every word ≥{int(100 * res['cover_word'])}% "
          f"blacked out; visual item = ≥{int(100 * res['cover_visual'])}% of its box. Page clean = nothing leaks. "
-         "Each row adds one component to the row above.", "",
+         "Each row adds one component to the row above; the last row is the browser build (no EasyOCR).", "",
          "| Configuration | All PII fully redacted ↑ | Text ↑ | Visual ↑ | Pages with no leak ↑ | Over-redaction ↓ | s/page |",
          "|---|---|---|---|---|---|---|"]
     for r in rows:

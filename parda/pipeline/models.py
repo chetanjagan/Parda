@@ -4,7 +4,28 @@ import os
 GLINER_BASE = "urchade/gliner_multi_pii-v1"
 
 
+def onnx_target(path):
+    """(onnx_file, torch_source) if `path` is an exported model (a .onnx file or its folder), else None.
+    A folder means its 8-bit model if there is one (what the web app ships), else the full-precision one."""
+    import json
+    if path.endswith(".onnx") and os.path.isfile(path):
+        folder, onnx_file = os.path.dirname(path), path
+    elif os.path.isdir(path) and os.path.isfile(os.path.join(path, "parda_onnx.json")):
+        folder, onnx_file = path, None
+    else:
+        return None
+    meta = json.load(open(os.path.join(folder, "parda_onnx.json")))
+    if onnx_file is None:
+        onnx_file = os.path.join(folder, meta["files"].get("int8") or meta["files"]["fp32"])
+    return onnx_file, meta["source"]
+
+
 def gliner(path_or_repo):
+    """A GLiNER model; an exported ONNX model runs in onnxruntime with GLiNER's own pre/post-processing."""
+    target = onnx_target(path_or_repo)
+    if target:
+        from ..export.onnx_runtime import load_onnx
+        return load_onnx(*target)
     from ..pii.predict import load_gliner
     return load_gliner(path_or_repo)
 

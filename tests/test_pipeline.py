@@ -250,9 +250,10 @@ def test_evaluate_e2e_cli_with_fake_models():
     res = json.load(open(os.path.join(out, "report_e2e.json")))
     names = [r["config"] for r in res["configs"]]
     assert names == ["rules only", "off-the-shelf GLiNER + rules", "fine-tuned GLiNER + rules", "+ gap fill",
-                     "+ YOLO visual = Parda"], names  # EasyOCR row skipped: not in --ocr
-    full = res["configs"][-1]
-    assert full["visual"] == 1.0 and full["text"] == res["configs"][-2]["text"]
+                     "+ YOLO visual = Parda", "browser build: Tesseract only + YOLO"], names  # EasyOCR row skipped
+    full = res["configs"][-2]
+    assert full["visual"] == 1.0 and full["text"] == res["configs"][-3]["text"]
+    assert res["configs"][-1]["fully_redacted"] == full["fully_redacted"]  # only Tesseract given: same system
     md = open(os.path.join(out, "report_e2e.md"), encoding="utf-8").read()
     assert "| + YOLO visual = Parda |" in md and "## By PII type" in md
     # the redact CLI loads the same fake models from "HF repos"
