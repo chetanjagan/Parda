@@ -1,0 +1,155 @@
+{
+  "train_examples": 32022,
+  "val_examples": 1006,
+  "train_by_source": {
+    "tess_scan": 10179,
+    "clean": 14849,
+    "tess_photo": 4639,
+    "easy_photo": 1039,
+    "easy_scan": 1316
+  },
+  "docs": {
+    "tess_scan_docs": 10002,
+    "tess_photo_docs": 6000,
+    "easy_scan_docs": 1200,
+    "easy_photo_docs": 1200,
+    "clean_docs": 10000
+  },
+  "ocr_sources": [
+    {
+      "name": "tess_scan",
+      "data": "/kaggle/input/notebooks/chetanjagan/parda/parda_synth_v1",
+      "ocr": "/kaggle/input/notebooks/chetanjagan/phase3/ocr_train/ocr_tesseract.jsonl",
+      "mode": "words"
+    },
+    {
+      "name": "tess_photo",
+      "data": "/kaggle/input/notebooks/chetanjagan/08a-photo-pages/photo",
+      "ocr": "/kaggle/input/notebooks/chetanjagan/08a-photo-pages/photo/ocr_tesseract.jsonl",
+      "mode": "words"
+    },
+    {
+      "name": "easy_scan",
+      "data": "/kaggle/input/notebooks/chetanjagan/parda/parda_synth_v1",
+      "ocr": "/kaggle/working/easy_scan/ocr_easyocr.jsonl",
+      "mode": "lines"
+    },
+    {
+      "name": "easy_photo",
+      "data": "/kaggle/input/notebooks/chetanjagan/08a-photo-pages/photo",
+      "ocr": "/kaggle/working/easy_photo/ocr_easyocr.jsonl",
+      "mode": "lines"
+    }
+  ],
+  "transfer_by_source": {
+    "tess_scan": {
+      "transferred": 80231,
+      "missed": 8582,
+      "unreadable_dropped": 4965
+    },
+    "tess_photo": {
+      "transferred": 39678,
+      "missed": 14117,
+      "unreadable_dropped": 3689
+    },
+    "easy_scan": {
+      "transferred": 10642,
+      "missed": 11,
+      "unreadable_dropped": 514
+    },
+    "easy_photo": {
+      "transferred": 10651,
+      "missed": 43,
+      "unreadable_dropped": 1379
+    }
+  },
+  "noisy_label_transfer": {
+    "entities_transferred": 141202,
+    "entities_ocr_missed": 22753,
+    "entities_unreadable_dropped": 10547,
+    "mean_transferred_cer": 0.1277
+  },
+  "labels": {
+    "clean:aadhaar number": 4644,
+    "clean:abha health id": 1980,
+    "clean:address": 8680,
+    "clean:bank account number": 8760,
+    "clean:date of birth": 6001,
+    "clean:email address": 2019,
+    "clean:employee id": 2004,
+    "clean:gstin number": 2004,
+    "clean:ifsc code": 8997,
+    "clean:medical record number": 1980,
+    "clean:pan number": 6723,
+    "clean:person name": 38670,
+    "clean:phone number": 10151,
+    "clean:uan number": 2004,
+    "clean:upi id": 7046,
+    "clean:voter id number": 669,
+    "easy_photo:aadhaar number": 344,
+    "easy_photo:abha health id": 98,
+    "easy_photo:address": 480,
+    "easy_photo:bank account number": 446,
+    "easy_photo:date of birth": 542,
+    "easy_photo:email address": 127,
+    "easy_photo:employee id": 107,
+    "easy_photo:gstin number": 107,
+    "easy_photo:ifsc code": 477,
+    "easy_photo:medical record number": 99,
+    "easy_photo:pan number": 454,
+    "easy_photo:person name": 2624,
+    "easy_photo:phone number": 569,
+    "easy_photo:uan number": 107,
+    "easy_photo:upi id": 371,
+    "easy_photo:voter id number": 59,
+    "easy_scan:aadhaar number": 427,
+    "easy_scan:abha health id": 142,
+    "easy_scan:address": 640,
+    "easy_scan:bank account number": 605,
+    "easy_scan:date of birth": 631,
+    "easy_scan:email address": 160,
+    "easy_scan:employee id": 151,
+    "easy_scan:gstin number": 151,
+    "easy_scan:ifsc code": 632,
+    "easy_scan:medical record number": 143,
+    "easy_scan:pan number": 577,
+    "easy_scan:person name": 3312,
+    "easy_scan:phone number": 751,
+    "easy_scan:uan number": 151,
+    "easy_scan:upi id": 481,
+    "easy_scan:voter id number": 63,
+    "tess_photo:aadhaar number": 1300,
+    "tess_photo:abha health id": 269,
+    "tess_photo:address": 1403,
+    "tess_photo:bank account number": 1413,
+    "tess_photo:date of birth": 2081,
+    "tess_photo:email address": 255,
+    "tess_photo:employee id": 272,
+    "tess_photo:gstin number": 387,
+    "tess_photo:ifsc code": 1474,
+    "tess_photo:medical record number": 256,
+    "tess_photo:pan number": 1434,
+    "tess_photo:person name": 8304,
+    "tess_photo:phone number": 1473,
+    "tess_photo:uan number": 398,
+    "tess_photo:upi id": 1149,
+    "tess_photo:voter id number": 323,
+    "tess_scan:aadhaar number": 3036,
+    "tess_scan:abha health id": 772,
+    "tess_scan:address": 4322,
+    "tess_scan:bank account number": 4079,
+    "tess_scan:date of birth": 4365,
+    "tess_scan:email address": 670,
+    "tess_scan:employee id": 265,
+    "tess_scan:gstin number": 1040,
+    "tess_scan:ifsc code": 4129,
+    "tess_scan:medical record number": 762,
+    "tess_scan:pan number": 3428,
+    "tess_scan:person name": 21645,
+    "tess_scan:phone number": 4499,
+    "tess_scan:uan number": 979,
+    "tess_scan:upi id": 3417,
+    "tess_scan:voter id number": 729
+  },
+  "benchmark_pages_excluded": 300
+}
