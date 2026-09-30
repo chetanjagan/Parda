@@ -94,6 +94,10 @@ def attach_onnx(model, onnx_file, threads=None):
                     return orig(**kw)
             for n, size in fixed["pad_to"].items():
                 feed_src[n] = pad_dim1(kw[n], size)
+            if fixed.get("fake_text_lengths"):  # the network sees max_words words; the LSTM gets the real count
+                feed_src["text_lengths"] = torch.full_like(kw["text_lengths"], fixed["max_words"])
+        if "lstm_lengths" in names:
+            feed_src["lstm_lengths"] = kw["text_lengths"].reshape(-1)
         feed = {n: feed_src[n].detach().cpu().numpy() for n in names}
         logits = torch.from_numpy(sess.run(["logits"], feed)[0])
         if fixed:

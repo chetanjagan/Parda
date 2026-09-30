@@ -82,7 +82,9 @@ def capture(model, text=SAMPLE, labels=None, threshold=0.3):
     return names, [kw[k] for k in names], extra
 
 
-def make_wrapper(net, names, extra):
+def make_wrapper(net, names, extra, holder=None):
+    """The network as a module of tensors only. With `holder`, the last input is the real word count, handed to the
+    patched LSTM encoders (lstm_patch) so it is a real input of the exported model, not a frozen constant."""
     import torch
     from .onnx_runtime import logits_of
 
@@ -92,7 +94,13 @@ def make_wrapper(net, names, extra):
             self.net = net
 
         def forward(self, *xs):
-            return logits_of(self.net(**dict(zip(names, xs)), **extra))
+            if holder is not None:
+                holder["lengths"], xs = xs[-1], xs[:-1]
+            try:
+                return logits_of(self.net(**dict(zip(names, xs)), **extra))
+            finally:
+                if holder is not None:
+                    holder["lengths"] = None
 
     return Wrapper().eval()
 
@@ -106,28 +114,56 @@ def export_gliner_model(model, out_dir, source, opset=14, quantize=True, max_wor
         model.eval()
     except Exception:
         pass
+    from .lstm_patch import packing_modules, patch_lstms
+    from .onnx_runtime import logits_of
     names, tensors, extra = capture(model, text=dummy_text(max_words))
     fixed = fixed_shapes(names, tensors)
-    wrapper = make_wrapper(model.model, names, extra)
+    # GLiNER's packed LSTM takes its lengths from a plain Python list -> frozen by export. Replace it with an exact
+    # equivalent fed by a real input, after checking in PyTorch that it gives the same numbers.
+    s_names, s_tensors, s_extra = capture(model, text=SAMPLE)
     with torch.no_grad():
-        n_dims = wrapper(*tensors).dim()
+        ref = logits_of(model.model(**dict(zip(s_names, s_tensors)), **s_extra))
+    holder = {"lengths": None}
+    packing = packing_modules(model.model)
+    patched = patch_lstms(model.model, holder)
+    left = [n for n in packing if n not in patched]
+    if left and not getattr(model, "_parda_allow_unpatched", False):
+        raise RuntimeError(f"modules that pack sequences could not be patched: {left} (patched: {patched}). "
+                           "Exporting them would freeze their lengths again.")
+    lstm_diff = None
+    if patched:
+        with torch.no_grad():
+            new = logits_of(model.model(**dict(zip(s_names, s_tensors)), **s_extra))
+        lstm_diff = float((ref - new).abs().max())
+        if lstm_diff > 1e-4:
+            raise RuntimeError(f"the LSTM replacement changes the output (max diff {lstm_diff}); not exporting")
+    in_names, inputs = list(names), list(tensors)
+    if patched:
+        in_names.append("lstm_lengths")
+        inputs.append(tensors[names.index("text_lengths")].reshape(-1).clone())
+        if fixed:
+            fixed["fake_text_lengths"] = True  # the rest of the network always sees max_words words
+    wrapper = make_wrapper(model.model, names, extra, holder if patched else None)
+    with torch.no_grad():
+        n_dims = wrapper(*inputs).dim()
     # batch and length dims are dynamic; deeper dims (e.g. span_idx's [start, end] pair) stay fixed
-    dyn = {n: ({0: "batch"} if t.dim() == 1 else {0: "batch", 1: f"{n}_len"}) for n, t in zip(names, tensors)}
+    dyn = {n: ({0: "batch"} if t.dim() == 1 else {0: "batch", 1: f"{n}_len"}) for n, t in zip(in_names, inputs)}
     dyn["logits"] = {i: f"logits_{i}" for i in range(n_dims)}
     fp32 = os.path.join(out_dir, "model_fp32.onnx")
-    kw = dict(input_names=names, output_names=["logits"], dynamic_axes=dyn, opset_version=opset, do_constant_folding=True)
+    kw = dict(input_names=in_names, output_names=["logits"], dynamic_axes=dyn, opset_version=opset, do_constant_folding=True)
     t0 = time.time()
     exporter = "torchscript"
     with torch.no_grad():
         try:
-            torch.onnx.export(wrapper, tuple(tensors), fp32, dynamo=False, **kw)
+            torch.onnx.export(wrapper, tuple(inputs), fp32, dynamo=False, **kw)
         except TypeError:  # older torch: no `dynamo` argument (TorchScript is its only exporter)
-            torch.onnx.export(wrapper, tuple(tensors), fp32, **kw)
+            torch.onnx.export(wrapper, tuple(inputs), fp32, **kw)
         except Exception as first:  # a torch without the TorchScript exporter: use the new one
             print(f"TorchScript export failed ({type(first).__name__}: {first}); trying the dynamo exporter", flush=True)
-            torch.onnx.export(wrapper, tuple(tensors), fp32, dynamo=True, external_data=False, **kw)
+            torch.onnx.export(wrapper, tuple(inputs), fp32, dynamo=True, external_data=False, **kw)
             exporter = "dynamo"
-    info = {"source": source, "inputs": names, "fixed": fixed, "constant_inputs": {k: repr(v) for k, v in extra.items()},
+    info = {"source": source, "inputs": in_names, "fixed": fixed, "patched_lstms": patched, "lstm_check_max_diff": lstm_diff,
+            "constant_inputs": {k: repr(v)[:200] for k, v in extra.items()},
             "opset": opset, "exporter": exporter, "files": {"fp32": "model_fp32.onnx"},
             "export_seconds": round(time.time() - t0, 1)}
     if quantize:
@@ -210,8 +246,9 @@ def main(argv=None):
         summary["yolo"] = export_yolo(a.yolo, os.path.join(a.out, "yolo"))
         print("YOLO:", summary["yolo"], flush=True)
     gdir = os.path.join(a.out, "gliner")
-    torch_model = _cpu(load_gliner(a.gliner))
-    summary["gliner"] = export_gliner_model(torch_model, gdir, a.gliner, a.opset, not a.no_quantize, a.max_words)
+    summary["gliner"] = export_gliner_model(_cpu(load_gliner(a.gliner)), gdir, a.gliner, a.opset, not a.no_quantize,
+                                            a.max_words)  # its own copy: the export patches the LSTM in place
+    torch_model = _cpu(load_gliner(a.gliner))  # untouched reference for the check
     print("GLiNER:", json.dumps(summary["gliner"]["mb"]), flush=True)
     texts = parity_texts(a.parity_ocr, a.parity_n) if a.parity_ocr else [SAMPLE]
     ref = GLiNERPredictor(torch_model, a.threshold, name="torch")

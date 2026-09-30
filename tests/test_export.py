@@ -227,7 +227,9 @@ def test_word_count_fixed_by_export_is_padded_at_runtime():
     from parda.export.onnx_runtime import attach_onnx
     from parda.pii.predict import GLiNERPredictor
     out = os.path.join(TMP, "onnx_lstm")
-    info = export_gliner_model(_lstm_toy(), out, "toy", quantize=False, max_words=64)
+    toy = _lstm_toy()
+    toy._parda_allow_unpatched = True  # this model packs inside the network itself: tests the padding path alone
+    info = export_gliner_model(toy, out, "toy", quantize=False, max_words=64)
     assert info["fixed"] == {"max_words": 64, "max_width": 2, "pad_to": {"span_idx": 128, "span_mask": 128}}, info["fixed"]
     onnx_model = attach_onnx(_lstm_toy(), os.path.join(out, "model_fp32.onnx"))
     texts = ["Priya", "Name Priya Rao PAN ABCPR1234F lives at Flat 12", " ".join(f"w{i}" for i in range(60)),
@@ -240,6 +242,131 @@ def test_word_count_fixed_by_export_is_padded_at_runtime():
     labels = [f"l{i}" for i in range(18)]
     assert onnx_model.predict_entities(long_text, labels, 0.5) == _lstm_toy().predict_entities(long_text, labels, 0.5)
     assert onnx_model.onnx_fallbacks == 1
+
+
+def _gliner_like_toy():
+    """Built like GLiNER 0.2.29 (see its modeling/utils.py and layers.py): the word table is sized from
+    text_lengths.max(), an LSTM encoder SUB-MODULE packs the words, and the lengths it packs with come from a plain
+    Python list (word_lengths). Exported naively, the list is frozen and shorter texts crash in the LSTM."""
+    import torch
+    from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+
+    @dataclass
+    class ToyOut:
+        logits: object = None
+
+    class Encoder(torch.nn.Module):  # like GLiNER's LstmSeq2SeqEncoder
+        def __init__(self):
+            super().__init__()
+            self.lstm = torch.nn.LSTM(16, 8, num_layers=2, batch_first=True, bidirectional=True)
+
+        def forward(self, x, mask, hidden=None):
+            lengths = mask.sum(dim=1).cpu()
+            packed = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
+            out, _ = self.lstm(packed, hidden)
+            out, _ = pad_packed_sequence(out, batch_first=True)
+            return out
+
+    class Net(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            torch.manual_seed(1)
+            self.emb = torch.nn.Embedding(300, 16)
+            self.rnn = Encoder()
+            self.lab = torch.nn.Linear(16, 18)
+
+        def forward(self, input_ids, attention_mask, words_mask, text_lengths, span_idx, span_mask,
+                    word_lengths=None, threshold=0.5):
+            B = input_ids.shape[0]
+            tok = self.emb(input_ids) * attention_mask.unsqueeze(-1)
+            W = text_lengths.max()
+            words = tok.new_zeros((B, W, 16))
+            b, t = torch.where(words_mask > 0)
+            words[b, words_mask[b, t] - 1] = tok[b, t]
+            lens = torch.tensor(word_lengths)  # a Python list: frozen by export, as in GLiNER
+            mask = torch.arange(W).unsqueeze(0) < lens.unsqueeze(1)
+            out = self.rnn(words, mask)
+            T = out.shape[1]
+            K = span_idx.shape[1] // T
+            st = torch.gather(out, 1, span_idx[..., 0:1].expand(-1, -1, 16))
+            en = torch.gather(out, 1, span_idx[..., 1:2].expand(-1, -1, 16))
+            return ToyOut(logits=self.lab(st + en).view(B, T, K, 18) * span_mask.view(B, T, K, 1))
+
+    class ToyGLiNER:
+        def __init__(self):
+            self.model = Net().eval()
+
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+        def predict_entities(self, text, labels, threshold=0.5):
+            words = [(m.start(), m.end()) for m in re.finditer(r"\S+", text)]
+            L, K = len(words), 2
+            if not L:
+                return []
+            ids = [5, 6, 7] + [sum(map(ord, text[a:b])) % 299 + 1 for a, b in words]
+            spans = [(i, min(i + k, L - 1)) for i in range(L) for k in range(K)]
+            with torch.no_grad():
+                out = self.model(input_ids=torch.tensor([ids]), attention_mask=torch.ones(1, len(ids)),
+                                 words_mask=torch.tensor([[0, 0, 0] + list(range(1, L + 1))]),
+                                 text_lengths=torch.tensor([[L]]), span_idx=torch.tensor([spans]),
+                                 span_mask=torch.tensor([[1.0 if i + k < L else 0.0 for i in range(L) for k in range(K)]]),
+                                 word_lengths=[L], threshold=threshold)
+            probs = torch.sigmoid(out.logits)[0]
+            res = []
+            for i in range(L):
+                for k in range(K):
+                    if i + k < L:
+                        c = int(probs[i, k].argmax())
+                        if float(probs[i, k, c]) >= threshold:
+                            res.append({"start": words[i][0], "end": words[i + k][1], "label": labels[c],
+                                        "score": float(probs[i, k, c])})
+            return res
+
+    return ToyGLiNER()
+
+
+def test_lstm_replacement_is_exact():
+    if not _have("torch"):
+        print("   (skipped: torch not installed)")
+        return
+    import torch
+    from parda.export.lstm_patch import masked_lstm, patch_lstms, _uni
+    from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+    torch.manual_seed(3)
+    lstm = torch.nn.LSTM(6, 5, num_layers=2, batch_first=True, bidirectional=True).eval()
+    x, lengths = torch.randn(3, 9, 6), torch.tensor([9, 4, 1])
+    ref, _ = pad_packed_sequence(lstm(pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False))[0],
+                                 batch_first=True, total_length=9)
+    parts = [[_uni(lstm, layer, r) for r in (False, True)] for layer in range(2)]
+    with torch.no_grad():
+        got = masked_lstm(lstm, parts, x, lengths)
+    assert float((ref - got).abs().max()) < 1e-5  # same numbers, zeros after each length
+    toy = _gliner_like_toy()
+    assert patch_lstms(toy.model, {"lengths": None}) == ["rnn"]
+
+
+def test_gliner_like_export_with_frozen_word_lengths():
+    if not _have("torch", "onnx", "onnxruntime"):
+        print("   (skipped: torch/onnx/onnxruntime not installed)")
+        return
+    from parda.export.onnx_export import export_gliner_model
+    from parda.export.onnx_runtime import attach_onnx
+    from parda.pii.predict import GLiNERPredictor
+    out = os.path.join(TMP, "onnx_gliner_like")
+    info = export_gliner_model(_gliner_like_toy(), out, "toy", quantize=False, max_words=64)
+    assert info["patched_lstms"] == ["rnn"] and info["lstm_check_max_diff"] < 1e-5, info
+    assert "lstm_lengths" in info["inputs"] and info["fixed"]["fake_text_lengths"] is True
+    onnx_model = attach_onnx(_gliner_like_toy(), os.path.join(out, "model_fp32.onnx"))
+    texts = ["Priya", "Name Priya Rao PAN ABCPR1234F lives at Flat 12", " ".join(f"w{i}" for i in range(41)),
+             " ".join(f"v{i}" for i in range(63)), " ".join(f"x{i}" for i in range(150))]  # incl. 41: the Kaggle crash
+    ref = GLiNERPredictor(_gliner_like_toy(), 0.5, window=60, stride=40)
+    got = GLiNERPredictor(onnx_model, 0.5, window=60, stride=40)
+    r = span_agreement(ref, got, texts)
+    assert r["spans_torch"] > 0 and r["agreement_f1"] == 1.0 and onnx_model.onnx_fallbacks == 0, r
 
 
 def test_capture_refuses_positional_networks():
