@@ -21,6 +21,31 @@ SAMPLE = ("Name: Priya Rao, PAN ABCPR1234F, Aadhaar 4829 1736 5520, mobile +91 9
           "lives at Flat 12, 4th Cross, Jayanagar, Bengaluru - 560041. Employee ID EMP12334, UAN 100660595745.")
 
 
+MAX_WORDS = 256  # the exported GLiNER always sees this many words; shorter texts are padded (windows are <= 200)
+
+
+def dummy_text(n_words):
+    """n one-word, one-token words: the export runs on a text of exactly the maximum size."""
+    return " ".join(["a"] * n_words)
+
+
+def fixed_shapes(names, tensors):
+    """GLiNER sizes some internal tables by the number of words, and export records that number as a constant.
+    Returns what the runtime must pad to that size (None if the network has no word-count input)."""
+    d = dict(zip(names, tensors))
+    if "text_lengths" not in d:
+        return None
+    W = int(d["text_lengths"].max())
+    K = d["span_idx"].shape[1] // W if "span_idx" in d and W else None
+    pad = {}
+    for n, t in d.items():
+        if n in ("input_ids", "attention_mask", "words_mask") or t.dim() < 2:
+            continue  # token-level inputs stay dynamic
+        if t.shape[1] == W or (K and t.shape[1] == W * K):
+            pad[n] = int(t.shape[1])
+    return {"max_words": W, "max_width": K, "pad_to": pad}
+
+
 def _labels():
     from ..pii.labels import LABELS
     return list(LABELS.values())
@@ -72,15 +97,17 @@ def make_wrapper(net, names, extra):
     return Wrapper().eval()
 
 
-def export_gliner_model(model, out_dir, source, opset=14, quantize=True):
-    """model: a loaded GLiNER(-like) object on CPU. Returns info about the exported files."""
+def export_gliner_model(model, out_dir, source, opset=14, quantize=True, max_words=MAX_WORDS):
+    """model: a loaded GLiNER(-like) object on CPU. Returns info about the exported files.
+    Exported on a text of exactly `max_words` words (see fixed_shapes); onnx_runtime pads shorter texts."""
     import torch
     os.makedirs(out_dir, exist_ok=True)
     try:
         model.eval()
     except Exception:
         pass
-    names, tensors, extra = capture(model)
+    names, tensors, extra = capture(model, text=dummy_text(max_words))
+    fixed = fixed_shapes(names, tensors)
     wrapper = make_wrapper(model.model, names, extra)
     with torch.no_grad():
         n_dims = wrapper(*tensors).dim()
@@ -100,7 +127,7 @@ def export_gliner_model(model, out_dir, source, opset=14, quantize=True):
             print(f"TorchScript export failed ({type(first).__name__}: {first}); trying the dynamo exporter", flush=True)
             torch.onnx.export(wrapper, tuple(tensors), fp32, dynamo=True, external_data=False, **kw)
             exporter = "dynamo"
-    info = {"source": source, "inputs": names, "constant_inputs": {k: repr(v) for k, v in extra.items()},
+    info = {"source": source, "inputs": names, "fixed": fixed, "constant_inputs": {k: repr(v) for k, v in extra.items()},
             "opset": opset, "exporter": exporter, "files": {"fp32": "model_fp32.onnx"},
             "export_seconds": round(time.time() - t0, 1)}
     if quantize:
@@ -170,6 +197,7 @@ def main(argv=None):
     ap.add_argument("--yolo", default=None)
     ap.add_argument("--out", required=True)
     ap.add_argument("--opset", type=int, default=14)
+    ap.add_argument("--max_words", type=int, default=MAX_WORDS)
     ap.add_argument("--no_quantize", action="store_true")
     ap.add_argument("--parity_ocr", nargs="*", default=[], help="OCR jsonl files whose page texts are used for the check")
     ap.add_argument("--parity_n", type=int, default=150, help="texts per OCR file")
@@ -183,7 +211,7 @@ def main(argv=None):
         print("YOLO:", summary["yolo"], flush=True)
     gdir = os.path.join(a.out, "gliner")
     torch_model = _cpu(load_gliner(a.gliner))
-    summary["gliner"] = export_gliner_model(torch_model, gdir, a.gliner, a.opset, not a.no_quantize)
+    summary["gliner"] = export_gliner_model(torch_model, gdir, a.gliner, a.opset, not a.no_quantize, a.max_words)
     print("GLiNER:", json.dumps(summary["gliner"]["mb"]), flush=True)
     texts = parity_texts(a.parity_ocr, a.parity_n) if a.parity_ocr else [SAMPLE]
     ref = GLiNERPredictor(torch_model, a.threshold, name="torch")
@@ -193,6 +221,7 @@ def main(argv=None):
         t0 = time.time()
         summary["agreement"][variant] = span_agreement(ref, GLiNERPredictor(m, a.threshold, name=variant), texts)
         summary["agreement"][variant]["seconds"] = round(time.time() - t0, 1)
+        summary["agreement"][variant]["too_long_fallbacks"] = getattr(m, "onnx_fallbacks", 0)
         print(f"{variant}: same spans as PyTorch on {len(texts)} OCR texts:",
               summary["agreement"][variant]["agreement_f1"], flush=True)
     json.dump(summary, open(os.path.join(a.out, "export_summary.json"), "w"), indent=2)

@@ -150,6 +150,98 @@ def test_export_round_trip_is_exact_for_any_text_length():
     assert span_agreement(ref, int8, texts)["agreement_f1"] > 0.5  # 8-bit runs; its accuracy is measured on Kaggle
 
 
+def _lstm_toy():
+    """Like GLiNER: a word table sized by int(text_lengths.max()) and a packed LSTM over the words. A plain export
+    records that word count as a constant, so any text with more words crashes in the LSTM (what happened on Kaggle)."""
+    import torch
+    from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+
+    @dataclass
+    class ToyOut:
+        logits: object = None
+
+    class LstmNet(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            torch.manual_seed(0)
+            self.emb = torch.nn.Embedding(300, 16)
+            self.lstm = torch.nn.LSTM(16, 8, batch_first=True, bidirectional=True)
+            self.lab = torch.nn.Linear(16, 18)
+
+        def forward(self, input_ids, attention_mask, words_mask, text_lengths, span_idx, span_mask):
+            B = input_ids.shape[0]
+            tok = self.emb(input_ids) * attention_mask.unsqueeze(-1)
+            W = int(text_lengths.max())  # python int: frozen by the exporter, as inside GLiNER
+            words = torch.zeros(B, W, 16)
+            b, t = torch.where(words_mask > 0)
+            words[b, words_mask[b, t] - 1] = tok[b, t]
+            packed = pack_padded_sequence(words, text_lengths.squeeze(-1).cpu(), batch_first=True, enforce_sorted=False)
+            out, _ = self.lstm(packed)
+            out, _ = pad_packed_sequence(out, batch_first=True, total_length=W)
+            K = span_idx.shape[1] // W
+            st = torch.gather(out, 1, span_idx[..., 0:1].expand(-1, -1, 16))
+            en = torch.gather(out, 1, span_idx[..., 1:2].expand(-1, -1, 16))
+            return ToyOut(logits=self.lab(st + en).view(B, W, K, 18) * span_mask.view(B, W, K, 1))
+
+    class LstmGLiNER:
+        def __init__(self):
+            self.model = LstmNet().eval()
+
+        def to(self, device):
+            return self
+
+        def eval(self):
+            return self
+
+        def predict_entities(self, text, labels, threshold=0.5):
+            words = [(m.start(), m.end()) for m in re.finditer(r"\S+", text)]
+            L, K = len(words), 2
+            if not L:
+                return []
+            ids = [5, 6, 7] + [sum(map(ord, text[a:b])) % 299 + 1 for a, b in words]  # a 3-token "prompt" first
+            spans = [(i, min(i + k, L - 1)) for i in range(L) for k in range(K)]
+            with torch.no_grad():
+                out = self.model(input_ids=torch.tensor([ids]), attention_mask=torch.ones(1, len(ids)),
+                                 words_mask=torch.tensor([[0, 0, 0] + list(range(1, L + 1))]),
+                                 text_lengths=torch.tensor([[L]]), span_idx=torch.tensor([spans]),
+                                 span_mask=torch.tensor([[1.0 if i + k < L else 0.0 for i in range(L) for k in range(K)]]))
+            probs = torch.sigmoid(out.logits)[0]  # words x widths x labels
+            res = []
+            for i in range(L):
+                for k in range(K):
+                    if i + k < L:
+                        c = int(probs[i, k].argmax())
+                        if float(probs[i, k, c]) >= threshold:
+                            res.append({"start": words[i][0], "end": words[i + k][1], "label": labels[c],
+                                        "score": float(probs[i, k, c])})
+            return res
+
+    return LstmGLiNER()
+
+
+def test_word_count_fixed_by_export_is_padded_at_runtime():
+    if not _have("torch", "onnx", "onnxruntime"):
+        print("   (skipped: torch/onnx/onnxruntime not installed)")
+        return
+    from parda.export.onnx_export import export_gliner_model
+    from parda.export.onnx_runtime import attach_onnx
+    from parda.pii.predict import GLiNERPredictor
+    out = os.path.join(TMP, "onnx_lstm")
+    info = export_gliner_model(_lstm_toy(), out, "toy", quantize=False, max_words=64)
+    assert info["fixed"] == {"max_words": 64, "max_width": 2, "pad_to": {"span_idx": 128, "span_mask": 128}}, info["fixed"]
+    onnx_model = attach_onnx(_lstm_toy(), os.path.join(out, "model_fp32.onnx"))
+    texts = ["Priya", "Name Priya Rao PAN ABCPR1234F lives at Flat 12", " ".join(f"w{i}" for i in range(60)),
+             " ".join(f"x{i}" for i in range(150))]  # 1, 9, 60 words, and 150 words (3 windows of <= 64 here)
+    ref, got = GLiNERPredictor(_lstm_toy(), 0.5, window=60, stride=40), GLiNERPredictor(onnx_model, 0.5, window=60, stride=40)
+    r = span_agreement(ref, got, texts)
+    assert r["spans_torch"] > 0 and r["agreement_f1"] == 1.0, r  # identical at every length up to the export size
+    assert onnx_model.onnx_fallbacks == 0
+    long_text = " ".join(f"y{i}" for i in range(80))  # longer than the export size: falls back to PyTorch, same answer
+    labels = [f"l{i}" for i in range(18)]
+    assert onnx_model.predict_entities(long_text, labels, 0.5) == _lstm_toy().predict_entities(long_text, labels, 0.5)
+    assert onnx_model.onnx_fallbacks == 1
+
+
 def test_capture_refuses_positional_networks():
     if not _have("torch"):
         print("   (skipped: torch not installed)")
