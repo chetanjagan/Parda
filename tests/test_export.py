@@ -344,7 +344,8 @@ def test_lstm_replacement_is_exact():
     parts = [[_uni(lstm, layer, r) for r in (False, True)] for layer in range(2)]
     with torch.no_grad():
         got = masked_lstm(lstm, parts, x, lengths)
-    assert float((ref - got).abs().max()) < 1e-5  # same numbers, zeros after each length
+    assert float((ref - got).detach().abs().max()) < 1e-5  # same numbers, zeros after each length
+    assert not any(p.requires_grad for part in parts for uni in part for p in uni.parameters())  # exportable
     toy = _gliner_like_toy()
     assert patch_lstms(toy.model, {"lengths": None}) == ["rnn"]
 

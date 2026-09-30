@@ -22,6 +22,8 @@ def _uni(lstm, layer, reverse):
     with torch.no_grad():
         for name in ("weight_ih", "weight_hh") + (("bias_ih", "bias_hh") if lstm.bias else ()):
             getattr(uni, f"{name}_l0").copy_(getattr(lstm, f"{name}{sfx}"))
+    for p in uni.parameters():  # fixed copies: the exporter can only bake in weights that are not trainable
+        p.requires_grad_(False)
     return uni.eval()
 
 
