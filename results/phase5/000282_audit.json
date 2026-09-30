@@ -1,0 +1,142 @@
+{
+  "input": "000282.jpg",
+  "lang": "kn-en",
+  "pages": [
+    {
+      "page": 1,
+      "size": [
+        1012,
+        638
+      ],
+      "regions": [
+        {
+          "kind": "text",
+          "label": "DOB",
+          "bbox": [
+            497.0,
+            283.0,
+            593.0,
+            299.0
+          ],
+          "score": 0.985,
+          "source": "tesseract"
+        },
+        {
+          "kind": "text",
+          "label": "PERSON_NAME",
+          "bbox": [
+            452.0,
+            179.0,
+            715.0,
+            208.0
+          ],
+          "score": 0.992,
+          "source": "tesseract"
+        },
+        {
+          "kind": "text",
+          "label": "PERSON_NAME",
+          "bbox": [
+            549.0,
+            214.0,
+            658.0,
+            231.0
+          ],
+          "score": 0.973,
+          "source": "tesseract"
+        },
+        {
+          "kind": "text",
+          "label": "VOTER_ID",
+          "bbox": [
+            254.0,
+            132.0,
+            436.0,
+            157.0
+          ],
+          "score": 1.0,
+          "source": "tesseract"
+        },
+        {
+          "kind": "text",
+          "label": "ADDRESS",
+          "bbox": [
+            307.9,
+            298.0,
+            517.0,
+            336.0
+          ],
+          "score": 0.968,
+          "source": "easyocr"
+        },
+        {
+          "kind": "text",
+          "label": "ADDRESS",
+          "bbox": [
+            314.0,
+            335.0,
+            571.0,
+            364.0
+          ],
+          "score": 0.968,
+          "source": "easyocr"
+        },
+        {
+          "kind": "text",
+          "label": "PERSON_NAME",
+          "bbox": [
+            447.0,
+            175.0,
+            719.0,
+            212.0
+          ],
+          "score": 0.985,
+          "source": "easyocr"
+        },
+        {
+          "kind": "text",
+          "label": "PERSON_NAME",
+          "bbox": [
+            546.0,
+            210.0,
+            660.0,
+            234.0
+          ],
+          "score": 0.972,
+          "source": "easyocr"
+        },
+        {
+          "kind": "text",
+          "label": "VOTER_ID",
+          "bbox": [
+            249.0,
+            127.0,
+            441.0,
+            163.0
+          ],
+          "score": 1.0,
+          "source": "easyocr"
+        },
+        {
+          "kind": "visual",
+          "label": "FACE",
+          "bbox": [
+            39.0,
+            122.0,
+            213.0,
+            336.2
+          ],
+          "score": 0.985,
+          "source": "yolo"
+        }
+      ],
+      "seconds": {
+        "ocr_tesseract": 0.714,
+        "text_pii_tesseract": 0.055,
+        "ocr_easyocr": 3.118,
+        "text_pii_easyocr": 0.056,
+        "visual": 0.043
+      }
+    }
+  ]
+}

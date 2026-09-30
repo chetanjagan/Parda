@@ -283,7 +283,7 @@ class YOLO:
             wr = csv.writer(f)
             wr.writerow(["                  epoch", "      train/box_loss", "   metrics/mAP50(B)", "metrics/mAP50-95(B)"])
             for e in range(1, kw["epochs"] + 1):
-                wr.writerow([e, 2.0 / e, 0.5 + 0.1 * e, 0.3])
+                wr.writerow([e, 2.0 / e, min(0.995, 0.5 + 0.5 * e), 0.3 + 0.1 * e])
         self.trainer = SimpleNamespace(save_dir=d)
         return SimpleNamespace(ap_class_index=[0, 1], box=SimpleNamespace(ap50=[0.9, 0.8]), names=NAMES)
 
@@ -320,7 +320,7 @@ def test_train_and_eval_glue_with_fake_ultralytics():
         assert s["val_ap50_by_class"] == {"FACE": 0.9, "SIGNATURE": 0.8}
         assert os.path.exists(os.path.join(out, "best.pt"))
         assert ("est_full_epoch_min" in s) == smoke
-    assert s["best_val_map50"] == 0.8 and s["best_epoch"] == 3.0
+    assert s["best_epoch"] == 3.0 and s["best_val_map50"] == 0.995 and abs(s["best_val_map50_95"] - 0.6) < 1e-9
     ev = os.path.join(TMP, "eval_yolo")
     _py("parda.vision.evaluate_vis", "--yolo_data", _yolo(), "--systems", "yolo",
         "--weights", os.path.join(TMP, "yolo_run", "best.pt"), "--out", ev, env=env)
