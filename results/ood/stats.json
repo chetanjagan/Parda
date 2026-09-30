@@ -1,0 +1,42 @@
+{
+  "n_ok": 300,
+  "n_errors": 0,
+  "errors": [],
+  "clean": false,
+  "face_photos": 2951,
+  "seconds": 57.4,
+  "doc_types": {
+    "bank_statement": 75,
+    "kyc_form": 75,
+    "pharmacy_bill": 75,
+    "offer_letter": 75
+  },
+  "langs": {
+    "en": 100,
+    "hi-en": 100,
+    "kn-en": 100
+  },
+  "entities": {
+    "PERSON_NAME": 1399,
+    "BANK_ACCOUNT": 150,
+    "ADDRESS": 300,
+    "IFSC": 150,
+    "PHONE": 225,
+    "EMAIL": 225,
+    "UPI_ID": 516,
+    "DOB": 75,
+    "AADHAAR": 75,
+    "PAN": 150,
+    "GSTIN": 150,
+    "MRN": 75,
+    "ABHA": 75,
+    "EMPLOYEE_ID": 75,
+    "UAN": 75
+  },
+  "visuals": {
+    "FACE": 75,
+    "SIGNATURE": 225,
+    "QR_CODE": 48,
+    "STAMP": 128
+  }
+}
