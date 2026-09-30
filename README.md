@@ -9,11 +9,12 @@ signatures and QR codes. It runs fully offline in the browser.
 
 ## Status
 
-- [x] **Phase 1 — Synthetic document generator** (30,000 docs, 0 errors)
-- [x] **Phase 2 — OCR benchmark** (Tesseract / EasyOCR / PaddleOCR on English, Hindi, Kannada)
-- [x] **Phase 3 — Text PII model** (GLiNER fine-tuned on clean + noisy-OCR text, rules baseline)
-- [x] **Phase 4 — Visual PII detector** (YOLO11n: 7.2% → 100% of visual PII fully redacted vs OpenCV)
-- [ ] Phase 5 — Fusion, evaluation benchmark
+- [X] **Phase 1 — Synthetic document generator** (30,000 docs, 0 errors)
+- [X] **Phase 2 — OCR benchmark** (Tesseract / EasyOCR / PaddleOCR on English, Hindi, Kannada)
+- [X] **Phase 3 — Text PII model** (GLiNER fine-tuned on clean + noisy-OCR text, rules baseline)
+- [X] **Phase 4 — Visual PII detector** (YOLO11n: 7.2% → 100% of visual PII fully redacted vs OpenCV)
+- [X] **Phase 5 — Full pipeline + end-to-end benchmark** (96.1% of all PII fully redacted; rules only 18.7%)
+
 - [ ] Phase 6 — ONNX/INT8 in-browser inference + web UI
 
 ## Repo layout
@@ -75,6 +76,7 @@ python -m parda.ocr.run_ocr --engine tesseract --per_lang 100 --workers 4 --out 
 python -m parda.ocr.run_ocr --engine easyocr   --per_lang 100 --out outputs/ocr_bench
 python -m parda.ocr.evaluate --out outputs/ocr_bench
 ```
+
 Key metric: **PII exact**, the share of personal-data items OCR reads perfectly. Redaction can only
 hide what OCR can read, so this is the ceiling for the whole system. Results: `results/phase2/`.
 
@@ -91,12 +93,13 @@ python -m parda.pii.train_gliner --data_dir data/gliner --out outputs/gliner --s
 python -m parda.pii.train_gliner --data_dir data/gliner --out outputs/gliner --epochs 1
 python -m parda.pii.evaluate_pii --ocr outputs/bench/ocr_tesseract.jsonl --ft outputs/gliner/final
 ```
+
 Results: `results/phase3/`.
 
-| System (300 held-out scanned pages) | Fully redacted | Over-redaction | en | hi-en | kn-en |
-|---|---|---|---|---|---|
-| Rules only | 21.4% | 7.6% | 26.1% | 15.1% | 23.4% |
-| Off-the-shelf GLiNER + rules | 60.0% | 29.1% | 66.9% | 62.3% | 51.4% |
+| System (300 held-out scanned pages)        | Fully redacted  | Over-redaction  | en              | hi-en           | kn-en           |
+| ------------------------------------------ | --------------- | --------------- | --------------- | --------------- | --------------- |
+| Rules only                                 | 21.4%           | 7.6%            | 26.1%           | 15.1%           | 23.4%           |
+| Off-the-shelf GLiNER + rules               | 60.0%           | 29.1%           | 66.9%           | 62.3%           | 51.4%           |
 | **Fine-tuned GLiNER (this project)** | **80.4%** | **10.4%** | **79.7%** | **85.5%** | **76.0%** |
 
 Fine-tuned on 25,028 clean + OCR-noisy examples in 54 min on one free Kaggle T4.
@@ -107,10 +110,10 @@ Remaining gaps (address 27%, employee ID 24%) come mainly from OCR and are addre
 
 Held-out benchmark: the same 300 pages, 600 visual PII boxes. Faces are real photos from a held-out pool never seen in training.
 
-| System | Fully redacted | Precision | mAP50 | Speed |
-|---|---|---|---|---|
-| OpenCV (Haar faces + QR detector) | 7.2% | 17.9% | 18.9% | 0.21 s/page |
-| **YOLO11n, fine-tuned** | **100%** | **100%** | **100%** | **0.035 s/page** |
+| System                            | Fully redacted | Precision      | mAP50          | Speed                  |
+| --------------------------------- | -------------- | -------------- | -------------- | ---------------------- |
+| OpenCV (Haar faces + QR detector) | 7.2%           | 17.9%          | 18.9%          | 0.21 s/page            |
+| **YOLO11n, fine-tuned**     | **100%** | **100%** | **100%** | **0.035 s/page** |
 
 Faces 0% → 100%, signatures 0.6% → 100%, stamps 0% → 100%, QR codes 97.6% → 100%.
 Trained on 12,000 pages in 177 min on one T4. The Phase 1 cartoon ID photos were replaced with real face photos (CelebA)
@@ -130,6 +133,7 @@ python -m parda.vision.train_yolo --data_yaml data/yolo/data.yaml --out outputs/
 python -m parda.vision.train_yolo --data_yaml data/yolo/data.yaml --out outputs/yolo --epochs 40 --hours 3
 python -m parda.vision.evaluate_vis --yolo_data data/yolo --systems opencv,yolo --weights outputs/yolo/best.pt --out outputs/vis_after
 ```
+
 Headline metric: **% of true visual PII boxes fully redacted** (≥95% of the box covered, predictions padded
 by 6 px like the redaction step), plus AP50/mAP50 and over-redaction. Results: `results/phase4/`.
 
@@ -140,14 +144,14 @@ pip install pymupdf                                   # only needed for PDF inpu
 python -m parda.pipeline.redact scan.jpg form.pdf --out_dir redacted/ --lang auto \
        --gliner <you>/parda-gliner-v1 --yolo <you>/parda-yolo-v1 --ocr tesseract,easyocr
 ```
+
 Writes `<name>_redacted.pdf` (image-only, so no hidden text survives under the boxes) and `<name>_audit.json`
 (type, box, confidence and source of every redaction, never the PII text itself). `--preview` draws outlines
 instead of black boxes. End-to-end benchmark: `python -m parda.pipeline.evaluate_e2e ...` (see notebook 05).
 
 ## Labels
 
-Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID
-PASSPORT VEHICLE_REG UAN ABHA EMPLOYEE_ID MRN`
+Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID PASSPORT VEHICLE_REG UAN ABHA EMPLOYEE_ID MRN`
 
 Visual: `FACE SIGNATURE QR_CODE STAMP`
 
