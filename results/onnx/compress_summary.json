@@ -1,0 +1,17 @@
+{
+  "variants": {
+    "int8_embed": {
+      "mb": 554.5,
+      "agreement_f1": 0.9895,
+      "spans_torch": 1187,
+      "spans_onnx": 1188,
+      "make_seconds": 23.1,
+      "check_seconds": 296.3
+    }
+  },
+  "min_agreement": 0.98,
+  "texts": 100,
+  "chosen": "int8_embed",
+  "chosen_passed": true,
+  "fp32_mb": 1103.6
+}

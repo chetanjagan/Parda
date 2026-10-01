@@ -36,7 +36,8 @@ Share of all personal-data items fully hidden (text + visual), 300 pages per ben
 - [x] **Phase 5 — Full pipeline + end-to-end benchmark** (96.1% of all PII fully redacted; rules only 18.7%)
 - [x] **Real-world test** (unseen layouts + phone photos: 82.5%; off-the-shelf 38.9%)
 - [x] **Text model v2** (phone-photo + EasyOCR training: 87.4% on unseen photos, 97.2% on seen templates)
-- [ ] Phase 6 — ONNX/INT8 in-browser inference + web app
+- [x] **Phase 6, step 1 — Models for the browser** (ONNX, 0.0-point loss; GLiNER 1.1 GB → 555 MB)
+- [ ] Phase 6, step 2 — In-browser web app
 
 ## Repo layout
 
@@ -81,9 +82,14 @@ parda/pipeline/
   redact.py       CLI: redact images / multi-page TIFFs / PDFs / iPhone HEIC -> redacted PDF + audit JSON
   models.py       loads the fine-tuned GLiNER and YOLO from a local path or your private HF repos
   evaluate_e2e.py end-to-end pixel-level benchmark with an ablation (one component at a time)
+parda/export/
+  onnx_export.py  version-proof ONNX export of GLiNER (records the exact network inputs) and YOLO
+  lstm_patch.py   exact, export-friendly replacement for GLiNER's packed LSTM (lengths become a real input)
+  onnx_runtime.py runs an exported GLiNER inside the normal GLiNER object (pads to the export size)
+  compress.py     compression variants of the exported GLiNER, chosen by agreement with PyTorch
 parda/fsutil.py   folder search that never lists huge folders in full (fast on Kaggle mounts)
-notebooks/        01–08b: one Kaggle notebook per phase (see below)
-tests/            66 tests in 8 files; a perfect system must score exactly 100%, an empty one 0%
+notebooks/        01–10: one Kaggle notebook per step (see below)
+tests/            77 tests in 9 files; a perfect system must score exactly 100%, an empty one 0%
 scripts/          Kaggle setup (fonts, Tesseract language packs, EasyOCR)
 ```
 
@@ -211,6 +217,32 @@ On unseen photos: addresses 52% → 67%, UPI IDs 78% → 88%, names 84% → 90%,
 The test layouts stay unseen; the photo damage matches the training augmentation, so part of the gain is
 robustness to phone photos. Model: private HF repo `parda-gliner-v2`. Results: `results/text_v2/`.
 
+## Phase 6, step 1: models for the browser (ONNX)
+
+Both models are exported to ONNX (the format browsers run) and checked against PyTorch on both full benchmarks
+(notebooks 09, 10).
+
+| Model | Size | Same PII spans as PyTorch | All PII hidden, seen / unseen (full Parda) |
+|---|---|---|---|
+| GLiNER v2, PyTorch | 1.16 GB | – | 97.2% / 87.4% |
+| GLiNER v2, ONNX fp32 | 1,104 MB | 100% | 97.2% / 87.4% |
+| GLiNER v2, plain INT8 (every layer) | 338 MB | 36.2% | 75.7% / 59.8% |
+| **GLiNER v2, INT8 word-embedding table only (shipped)** | **555 MB** | **99.0%** | **97.2% / 87.4%** |
+| YOLO11n, ONNX | 10.4 MB | (fully redacted 100%, mAP50 1.000, same as PyTorch) | |
+
+What it took:
+- **Frozen lengths.** GLiNER passes the word count to its network as a Python list, so a plain export froze it and
+  any other text length crashed in the LSTM. The export now replaces GLiNER's packed LSTM with an exact equivalent
+  that takes the real lengths as an input (checked against the original before exporting), and pads every text to
+  a fixed 256 words, cutting the padding off the output.
+- **Compression.** Quantizing the matrix multiplications of mDeBERTa (per-tensor or per-channel) destroys it
+  (0–36% agreement); 16-bit conversion produced a model onnxruntime cannot load. Quantizing only the
+  word-embedding table (most of the file) halves the size with no measurable loss.
+- **Browser build (Tesseract only, no EasyOCR):** 89.7% on seen templates, **67.6%** on unseen phone photos
+  (vs 87.4% with both OCR engines). A second OCR engine that runs in the browser is worth ~20 points on photos.
+
+Models: private HF repo `parda-onnx-v1`. Results: `results/onnx/`.
+
 ## Notebooks (Kaggle)
 
 | Notebook | What it does | Hardware |
@@ -223,6 +255,8 @@ robustness to phone photos. Model: private HF repo `parda-gliner-v2`. Results: `
 | 06 | real-world test: unseen layouts + phone photos | GPU |
 | 07 | visual ink check | CPU |
 | 08a / 08b | phone-photo training pages; train GLiNER v2 + both benchmarks | CPU / GPU |
+| 09 | export GLiNER v2 and YOLO to ONNX, check against PyTorch | CPU |
+| 10 | compress GLiNER for the browser, pick the smallest accurate variant, both benchmarks | CPU |
 
 ## Labels
 

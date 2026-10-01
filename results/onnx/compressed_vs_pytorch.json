@@ -1,0 +1,16 @@
+### Compressed GLiNER for the browser: chosen **int8_embed**
+
+fp32 ONNX: 1103.6 MB, 100% the same spans as PyTorch (step 1). Plain 8-bit of every layer: 36.2%.
+
+| Variant | Size | Same spans as PyTorch |
+|---|---|---|
+| int8_embed | 554.5 MB | 99.0% |
+
+| Benchmark | Configuration | All PII: PyTorch → int8_embed | Text | Pages with no leak | s/page (CPU) |
+|---|---|---|---|---|---|
+| seen | + YOLO visual = Parda | 97.2% → **97.2%** | 96.5% → 96.5% | 74.7% → 74.7% | 6.97 |
+| seen | browser build: Tesseract only + YOLO | – → **89.7%** | – → 87.3% | – → 41.3% | 4.25 |
+| unseen | + YOLO visual = Parda | 87.4% → **87.4%** | 89.1% → 89.2% | 36.3% → 36.3% | 6.05 |
+| unseen | browser build: Tesseract only + YOLO | – → **67.6%** | – → 66.8% | – → 11.0% | 2.99 |
+
+Largest drop vs PyTorch: 0.0 points.
