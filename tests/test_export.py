@@ -436,7 +436,10 @@ def test_compress_variants_on_a_toy():
     texts = ["Name Priya Rao PAN ABCPR1234F lives at Flat 12", " ".join(f"w{i}" for i in range(41))]
     s = compress(out, texts, VARIANTS, min_agreement=0.0, threshold=0.5, model_loader=_gliner_like_toy)
     ok = {k: v for k, v in s["variants"].items() if "error" not in v}
-    assert {"int8_embed", "int8_matmul_pc", "int8_embed_matmul_pc"} <= set(ok), s  # fp16 needs onnxconverter-common
+    assert {"int8_embed", "int8_matmul_pc", "int8_embed_matmul_pc"} <= set(ok), s
+    if "fp16" not in ok:  # fp16 may not load (converter type mismatch) or need onnxconverter-common: recorded, not fatal
+        assert "error" in s["variants"]["fp16"] and not os.path.exists(os.path.join(out, "model_fp16.onnx"))
+        assert "fp16" not in json.load(open(os.path.join(out, "parda_onnx.json")))["files"]
     meta = json.load(open(os.path.join(out, "parda_onnx.json")))
     assert s["chosen"] in ok and meta["default"] == s["chosen"] and s["chosen_passed"]
     assert all(os.path.exists(os.path.join(out, meta["files"][k])) for k in ok)

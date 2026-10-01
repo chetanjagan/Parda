@@ -66,7 +66,13 @@ def compress(gliner_dir, texts, variants=VARIANTS, min_agreement=0.99, threshold
             continue
         made = time.time() - t0
         t0 = time.time()
-        r = span_agreement(ref, GLiNERPredictor(attach_onnx(load(), out), threshold, name=v), texts)
+        try:  # a variant onnxruntime cannot load or run is recorded, and the others are still measured
+            r = span_agreement(ref, GLiNERPredictor(attach_onnx(load(), out), threshold, name=v), texts)
+        except Exception as e:
+            results[v] = {"error": f"made, but does not run: {type(e).__name__}: {e}"[:300]}
+            print(f"{v}: {results[v]['error']}", flush=True)
+            os.remove(out)
+            continue
         results[v] = {"mb": round(os.path.getsize(out) / 2 ** 20, 1), "agreement_f1": r["agreement_f1"],
                       "spans_torch": r["spans_torch"], "spans_onnx": r["spans_onnx"],
                       "make_seconds": round(made, 1), "check_seconds": round(time.time() - t0, 1)}
