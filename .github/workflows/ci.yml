@@ -13,8 +13,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: TypeScript core must reproduce every Python answer
+      - name: TypeScript core + GLiNER (incl. the real tokenizer) must reproduce every Python answer
         working-directory: web
+        env:
+          REQUIRE_TOKENIZER: "1"
         run: |
           npm install --no-audit --no-fund
           npm test
