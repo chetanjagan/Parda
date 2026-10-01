@@ -100,7 +100,11 @@ def test_loader_recognises_exported_models():
               open(os.path.join(d, "parda_onnx.json"), "w"))
     for f in ("model_fp32.onnx", "model_int8.onnx"):
         open(os.path.join(d, f), "w").write("x")
-    assert models.onnx_target(d) == (os.path.join(d, "model_int8.onnx"), "me/parda-gliner-v2")  # folder -> 8-bit
+    assert models.onnx_target(d) == (os.path.join(d, "model_fp32.onnx"), "me/parda-gliner-v2")  # no choice yet: fp32
+    meta = json.load(open(os.path.join(d, "parda_onnx.json")))
+    meta["default"] = "int8"
+    json.dump(meta, open(os.path.join(d, "parda_onnx.json"), "w"))
+    assert models.onnx_target(d) == (os.path.join(d, "model_int8.onnx"), "me/parda-gliner-v2")  # the chosen variant
     fp = os.path.join(d, "model_fp32.onnx")
     assert models.onnx_target(fp) == (fp, "me/parda-gliner-v2")
     assert models.onnx_target("me/parda-gliner-v2") is None and models.onnx_target(TMP) is None
@@ -411,6 +415,32 @@ def test_gliner_like_export_with_frozen_word_lengths():
     got = GLiNERPredictor(onnx_model, 0.5, window=60, stride=40)
     r = span_agreement(ref, got, texts)
     assert r["spans_torch"] > 0 and r["agreement_f1"] == 1.0 and onnx_model.onnx_fallbacks == 0, r
+
+
+def test_choose_smallest_variant_that_is_accurate_enough():
+    from parda.export.compress import choose
+    r = {"a": {"mb": 300, "agreement_f1": 0.95}, "b": {"mb": 550, "agreement_f1": 0.995}, "c": {"mb": 850, "agreement_f1": 1.0}}
+    assert choose(r, 0.99) == ("b", True)            # smallest that keeps >= 99%
+    assert choose(r, 0.999) == ("c", True)
+    assert choose({"a": r["a"]}, 0.99) == ("a", False)  # none good enough: report the best, caller keeps fp32
+
+
+def test_compress_variants_on_a_toy():
+    if not _have("torch", "onnx", "onnxruntime"):
+        print("   (skipped: torch/onnx/onnxruntime not installed)")
+        return
+    from parda.export.compress import VARIANTS, compress
+    from parda.export.onnx_export import export_gliner_model
+    out = os.path.join(TMP, "onnx_compress")
+    export_gliner_model(_gliner_like_toy(), out, "toy", quantize=False, max_words=64)
+    texts = ["Name Priya Rao PAN ABCPR1234F lives at Flat 12", " ".join(f"w{i}" for i in range(41))]
+    s = compress(out, texts, VARIANTS, min_agreement=0.0, threshold=0.5, model_loader=_gliner_like_toy)
+    ok = {k: v for k, v in s["variants"].items() if "error" not in v}
+    assert {"int8_embed", "int8_matmul_pc", "int8_embed_matmul_pc"} <= set(ok), s  # fp16 needs onnxconverter-common
+    meta = json.load(open(os.path.join(out, "parda_onnx.json")))
+    assert s["chosen"] in ok and meta["default"] == s["chosen"] and s["chosen_passed"]
+    assert all(os.path.exists(os.path.join(out, meta["files"][k])) for k in ok)
+    assert models.onnx_target(out)[0] == os.path.join(out, meta["files"][s["chosen"]])
 
 
 def test_capture_refuses_positional_networks():

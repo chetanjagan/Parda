@@ -6,7 +6,7 @@ GLINER_BASE = "urchade/gliner_multi_pii-v1"
 
 def onnx_target(path):
     """(onnx_file, torch_source) if `path` is an exported model (a .onnx file or its folder), else None.
-    A folder means its 8-bit model if there is one (what the web app ships), else the full-precision one."""
+    A folder means the variant chosen by parda.export.compress ("default"), else the full-precision model."""
     import json
     if path.endswith(".onnx") and os.path.isfile(path):
         folder, onnx_file = os.path.dirname(path), path
@@ -16,7 +16,7 @@ def onnx_target(path):
         return None
     meta = json.load(open(os.path.join(folder, "parda_onnx.json")))
     if onnx_file is None:
-        onnx_file = os.path.join(folder, meta["files"].get("int8") or meta["files"]["fp32"])
+        onnx_file = os.path.join(folder, meta["files"].get(meta.get("default", "fp32")) or meta["files"]["fp32"])
     return onnx_file, meta["source"]
 
 
