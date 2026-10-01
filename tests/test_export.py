@@ -50,6 +50,49 @@ def test_logits_of_every_output_kind():
     assert logits_of(Out(logits=7)) == 7 and logits_of({"logits": 8}) == 8 and logits_of((9, 1)) == 9 and logits_of(5) == 5
 
 
+def test_onnx_yolo_gets_one_image_at_a_time():
+    import types
+    calls = []
+
+    class FakeYOLO:
+        def __init__(self, weights):
+            pass
+
+        def predict(self, paths, **kw):
+            calls.append(len(paths))
+            return [types.SimpleNamespace(names={0: "FACE"}, boxes=types.SimpleNamespace(
+                xyxy=_Arr([]), cls=_Arr([]), conf=_Arr([]))) for _ in paths]
+
+    real = sys.modules.get("ultralytics")
+    sys.modules["ultralytics"] = types.SimpleNamespace(YOLO=FakeYOLO)
+    try:
+        from parda.vision.detectors import YoloDetector
+        YoloDetector("parda-yolo.onnx", device="cpu").detect(["a.jpg", "b.jpg", "c.jpg"])
+        assert calls == [1, 1, 1], calls  # exported with a fixed batch of 1
+        calls.clear()
+        YoloDetector("best.pt", device="cpu").detect(["a.jpg", "b.jpg", "c.jpg"])
+        assert calls == [3], calls
+    finally:
+        if real is None:
+            del sys.modules["ultralytics"]
+        else:
+            sys.modules["ultralytics"] = real
+
+
+class _Arr:
+    def __init__(self, v):
+        self.v = v
+
+    def cpu(self):
+        return self
+
+    def numpy(self):
+        return self
+
+    def tolist(self):
+        return list(self.v)
+
+
 def test_loader_recognises_exported_models():
     d = os.path.join(TMP, "exp")
     os.makedirs(d)

@@ -99,6 +99,8 @@ class YoloDetector:
     def __init__(self, weights, conf=0.01, imgsz=1024, iou=0.5, device=None, batch=16):
         from ultralytics import YOLO
         self.model = YOLO(weights)
+        if str(weights).lower().endswith(".onnx"):
+            batch = 1  # the exported model takes one image at a time (as in the browser)
         self.conf, self.imgsz, self.iou, self.batch = conf, imgsz, iou, batch
         if device is None:
             try:
