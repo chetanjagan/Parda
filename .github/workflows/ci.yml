@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  web-core:
+    name: web core = Python pipeline (golden parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: TypeScript core must reproduce every Python answer
+        working-directory: web
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+
+  goldens:
+    name: goldens still match the Python pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install numpy pillow rapidfuzz
+      - name: Recompute the Python answers from the stored inputs
+        run: python tools/make_goldens.py --check
