@@ -2,8 +2,8 @@
  *  tests that do not need it never import the library. */
 import type { WordTokenizer } from "./processor.js";
 
-export async function loadTokenizer(tokenizerJson: unknown, tokenizerConfig: unknown): Promise<WordTokenizer> {
-  const name = "@huggingface/transformers";
+export async function loadTokenizer(tokenizerJson: unknown, tokenizerConfig: unknown,
+  name = "@huggingface/transformers"): Promise<WordTokenizer> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mod: any = await import(/* @vite-ignore */ name);
   const Cls = mod.DebertaV2Tokenizer ?? mod.PreTrainedTokenizer;

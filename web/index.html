@@ -3,49 +3,89 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Parda — hide personal data in your documents, in your browser</title>
+  <title>Parda — hide what's private before you share it</title>
+  <meta name="description" content="Hide Aadhaar, PAN, phone numbers, names, faces and signatures in Indian documents. Runs entirely in your browser.">
   <link rel="stylesheet" href="app.css">
-  <script type="importmap">
-  {
-    "imports": {
-      "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.mjs",
-      "tesseract.js": "https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.esm.min.js",
-      "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.0/dist/transformers.min.js",
-      "pdfjs-dist": "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs"
-    }
-  }
-  </script>
   <script type="module" src="build/app/main.js"></script>
 </head>
 <body>
-  <header>
-    <h1>Parda <span class="tag">beta</span></h1>
-    <p>Hide Aadhaar, PAN, phone numbers, names, faces and signatures in Indian documents (English, हिन्दी, ಕನ್ನಡ).
-      <strong>Everything runs in your browser — your document is never uploaded.</strong></p>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Parda, start over"><span class="mark" aria-hidden="true"></span>Parda</a>
+    <span class="local" title="Nothing you open here is uploaded">Runs on this device</span>
   </header>
+
   <main>
-    <section class="card" id="controls">
-      <label>Document language
-        <select id="lang">
-          <option value="en">English</option>
-          <option value="hi-en">Hindi + English</option>
-          <option value="kn-en">Kannada + English</option>
-        </select>
-      </label>
-      <label class="check"><input type="checkbox" id="easyocr">
-        Better reading of phone photos <small id="easysize"></small></label>
-      <div id="drop" tabindex="0">Drop a PDF or photo here, or <button id="pick" type="button">choose a file</button>
-        <input type="file" id="file" accept="application/pdf,image/*" hidden></div>
-      <p class="note" id="firstrun">The first time, the app downloads its models (~580 MB) once; after that it works from your
-        browser's storage. <button id="clear" type="button" class="link">Remove downloaded models</button></p>
+    <section id="start" class="start">
+      <div class="intro">
+        <h1>Hide what's private<br>before you share it.</h1>
+        <p class="lede">Aadhaar and PAN numbers, phone numbers, names, faces and signatures — in English, हिन्दी
+          and ಕನ್ನಡ documents. Your file never leaves this device.</p>
+        <p class="specimen" aria-hidden="true">Aadhaar <span class="num">6197 5241<i class="curtain"></i></span> <span class="tail">0246</span></p>
+      </div>
+      <div class="tray">
+        <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose a PDF or photo">
+          <span class="sheet" aria-hidden="true"></span>
+          <strong>Drop a PDF or photo</strong>
+          <span>or <button id="pick" type="button" class="linkish">choose a file</button></span>
+          <input type="file" id="file" accept="application/pdf,image/*" hidden>
+        </div>
+        <fieldset class="langs">
+          <legend>Language of the document</legend>
+          <label><input type="radio" name="lang" value="en" checked><span>English</span></label>
+          <label><input type="radio" name="lang" value="hi-en"><span>हिन्दी + English</span></label>
+          <label><input type="radio" name="lang" value="kn-en"><span>ಕನ್ನಡ + English</span></label>
+        </fieldset>
+        <label class="switch"><input type="checkbox" id="easyocr"><span class="track" aria-hidden="true"></span>
+          <span>Read phone photos better<small id="easysize"></small></span></label>
+        <p class="fine">The first time, the app downloads its models (about 580 MB) and keeps them in this browser.
+          <button id="clear" type="button" class="linkish">Remove them</button></p>
+      </div>
     </section>
-    <section class="card hidden" id="status">
-      <div id="step"></div>
-      <ul id="downloads"></ul>
+
+    <section id="work" class="work" hidden>
+      <h2 id="workfile"></h2>
+      <p id="step" class="step" role="status" aria-live="polite"></p>
+      <ul id="downloads" class="downloads"></ul>
+      <button id="stop" type="button" class="quiet">Stop</button>
     </section>
-    <section id="pages"></section>
+
+    <section id="review" class="review" hidden>
+      <div class="docname"><strong id="docname"></strong><span id="pagenav"></span></div>
+      <div class="toolbar">
+        <div class="tools">
+          <div class="seg" role="group" aria-label="View">
+            <button type="button" id="viewFound" aria-pressed="true">Found</button>
+            <button type="button" id="viewFinal" aria-pressed="false">Redacted</button>
+          </div>
+          <button type="button" id="undo" class="quiet" title="Undo (Ctrl+Z)">Undo</button>
+          <button type="button" id="redo" class="quiet" title="Redo (Ctrl+Shift+Z)">Redo</button>
+        </div>
+        <div class="tools save">
+          <button type="button" id="restart" class="quiet">New file</button>
+          <button type="button" id="saveAudit" class="quiet" title="What was hidden and where, never the text">Audit file</button>
+          <button type="button" id="savePng" class="quiet">PNG of this page</button>
+          <button type="button" id="savePdf" class="primary">Download PDF</button>
+        </div>
+      </div>
+      <div class="desk">
+        <div class="stage" id="stage"><canvas id="canvas"></canvas></div>
+        <aside class="inspector">
+          <p class="count" id="count"></p>
+          <p class="hint">Click a highlight to keep it visible. Drag on the page to hide anything that was missed.</p>
+          <div id="groups"></div>
+          <label class="switch small" id="maskrow" hidden><input type="checkbox" id="mask"><span class="track" aria-hidden="true"></span>
+            <span>Masked Aadhaar<small>Keep the last 4 digits visible</small></span></label>
+          <details id="readbox"><summary>What the app read on this page</summary><div id="readtext"></div></details>
+          <p class="timing" id="timing"></p>
+        </aside>
+      </div>
+    </section>
   </main>
-  <footer>Parda is a research demo trained on synthetic documents — always check the result before sharing.
-    Free, non-commercial use. <a href="https://huggingface.co/chetan-0804/parda-web-models">Models and licences</a></footer>
+
+  <footer class="foot">
+    <p>Parda is a research demo trained on synthetic documents. Check the result before you share it.
+      Free for non-commercial use. <a href="https://huggingface.co/chetan-0804/parda-web-models">Models and licences</a>,
+      <a href="https://github.com/chetanjagan/Parda">Source and benchmarks</a></p>
+  </footer>
 </body>
 </html>

@@ -1,3 +1,5 @@
+import { lib, LIBS } from "./libs.js";
+
 /** Files -> page images (RGBA pixels + a canvas). PDFs are rendered with pdf.js; photos keep their EXIF rotation. */
 export interface PageImage { canvas: HTMLCanvasElement; rgba: Uint8ClampedArray; width: number; height: number; name: string }
 
@@ -19,10 +21,8 @@ function fromSource(src: CanvasImageSource, w: number, h: number, name: string):
 
 export async function loadFile(file: File): Promise<PageImage[]> {
   if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    const name = "pdfjs-dist";
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfjs: any = await import(/* @vite-ignore */ name);
-    pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+    const pdfjs = await lib(LIBS.pdfjs);
+    pdfjs.GlobalWorkerOptions.workerSrc = LIBS.pdfjsWorker;
     const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
     const pages: PageImage[] = [];
     for (let i = 1; i <= doc.numPages; i++) {

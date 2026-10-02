@@ -1,6 +1,7 @@
 /** Model files: downloaded once from the public Hugging Face repo, cached in the browser (Cache Storage), and turned
  *  into onnxruntime-web sessions. onnxruntime-web, Tesseract.js and transformers.js come from the import map. */
 import type { Feed, OnnxMeta } from "../gliner/processor.js";
+import { LIBS } from "./libs.js";
 
 export const MODEL_REPO = "https://huggingface.co/chetan-0804/parda-web-models/resolve/main";
 export const CACHE_NAME = "parda-models-v1";
@@ -53,11 +54,10 @@ let ortPromise: Promise<Ort> | null = null;
 
 export function ort(): Promise<Ort> {
   ortPromise ??= (async () => {
-    const name = "onnxruntime-web";
-    const m: Ort = await import(/* @vite-ignore */ name);
+    const m: Ort = await import(/* @vite-ignore */ LIBS.ort);
     const o = m.default ?? m;
-    o.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
-    o.env.wasm.proxy = false; // a cross-origin proxy worker is fragile; the app yields between steps instead
+    o.env.wasm.wasmPaths = LIBS.ortWasm;
+    o.env.wasm.proxy = false; // this already runs inside the app's own worker
     o.env.wasm.numThreads = 1; // threads need cross-origin isolation, which static hosting cannot set
     return o;
   })();
