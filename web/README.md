@@ -8,8 +8,9 @@ The browser version of the Parda pipeline: documents are redacted **on the devic
 |---|---|---|
 | M1 | Pipeline core in TypeScript (`src/core`): ID rules + checksums, tokenising, windows, reading order of OCR words, text spans → pixel boxes, gap filling, padding, audit log | ✅ identical to Python on 262 texts and 33 pages |
 | M2 | GLiNER in the browser (`src/gliner`): input building, padding for the export, decoding; mDeBERTa tokenizer via transformers.js | ✅ identical to Python on 160 real OCR chunks (1,565 spans); real tokenizer checked in CI |
-| M3 | YOLO11n (10 MB ONNX) in the browser | |
-| M4 | OCR in the browser: Tesseract.js + EasyOCR (ONNX) | |
+| M3 | YOLO in the browser (`src/vision`): letterbox with OpenCV's integer resize, decoding + per-class overlap removal, boxes back to page pixels | ✅ same boxes as ultralytics on 8 real pages; input within 1 brightness level on ≤ 0.012% of pixels; real ONNX model checked in CI |
+| M4a | Browser OCR, part 1: Tesseract.js (`src/ocr`) with the Python engine's settings; `tools/ocr_pages.mjs` writes the Python OCR-cache format | wrapper tested; accuracy measured on both benchmarks in notebook 13 |
+| M4b | Browser OCR, part 2: EasyOCR converted to ONNX (the second engine, ~20 points on photos) | |
 | M5 | The UI (upload → review → export), all features | |
 | M6 | Deploy; measure the browser build on the benchmarks | |
 
@@ -30,8 +31,9 @@ and decodes every recorded score; `test/gliner_tokenizer.test.mjs` checks the re
 
 ```bash
 cd web
-npm install          # TypeScript + transformers.js (tokenizer)
-npm test             # type-check (strict) + 23 parity tests (core, GLiNER, real tokenizer)
+npm install          # TypeScript + transformers.js (tokenizer) + onnxruntime-node (real YOLO test)
+# the real-YOLO test needs public/yolo/parda-yolo.onnx (10 MB, from the HF repo parda-onnx-v1)
+npm test             # type-check (strict) + 29 parity tests (core, GLiNER, YOLO, real tokenizer, real YOLO)
 python ../tools/make_goldens.py --check   # the Python side still gives the stored answers
 ```
 
