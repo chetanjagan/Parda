@@ -21,11 +21,12 @@ jobs:
             echo "npm install failed (attempt $i), retrying in 30 s"; sleep 30
           done
           exit 1
-      - name: TypeScript core + GLiNER + YOLO (real tokenizer and real network) must reproduce every Python answer
+      - name: Core + GLiNER + YOLO + EasyOCR (real tokenizer and real networks) must reproduce every Python answer
         working-directory: web
         env:
           REQUIRE_TOKENIZER: "1"
           REQUIRE_YOLO: "1"
+          REQUIRE_EASYOCR: "1"
         run: npm test
 
   goldens:

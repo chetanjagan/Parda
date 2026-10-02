@@ -17,10 +17,10 @@ export function readPng(path) {
     else if (type === "IEND") break;
     p += 12 + len;
   }
-  if (bitDepth !== 8 || interlace !== 0 || (colorType !== 2 && colorType !== 6)) {
+  if (bitDepth !== 8 || interlace !== 0 || ![0, 2, 6].includes(colorType)) {
     throw new Error(`unsupported PNG: depth ${bitDepth}, colour type ${colorType}, interlace ${interlace}`);
   }
-  const ch = colorType === 6 ? 4 : 3;
+  const ch = colorType === 6 ? 4 : colorType === 2 ? 3 : 1;
   const raw = inflateSync(Buffer.concat(idat));
   const stride = width * ch;
   const out = new Uint8Array(height * stride);

@@ -12,5 +12,5 @@
     "declaration": false,
     "skipLibCheck": true
   },
-  "include": ["src/core/**/*.ts", "src/gliner/**/*.ts", "src/vision/**/*.ts", "src/ocr/**/*.ts"]
+  "include": ["src/core/**/*.ts", "src/gliner/**/*.ts", "src/vision/**/*.ts", "src/ocr/**/*.ts", "src/easyocr/**/*.ts"]
 }
