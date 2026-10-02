@@ -11,7 +11,7 @@ The browser version of the Parda pipeline: documents are redacted **on the devic
 | M3 | YOLO in the browser (`src/vision`): letterbox with OpenCV's integer resize, decoding + per-class overlap removal, boxes back to page pixels | ✅ same boxes as ultralytics on 8 real pages; input within 1 brightness level on ≤ 0.012% of pixels; real ONNX model checked in CI |
 | M4a | Browser OCR, part 1: Tesseract.js (`src/ocr`) with the Python engine's settings; `tools/ocr_pages.mjs` writes the Python OCR-cache format | wrapper tested; accuracy measured on both benchmarks in notebook 13 |
 | M4b | Browser OCR, part 2: EasyOCR (`src/easyocr`): CRAFT + recognizers as ONNX, detection, grouping, cropping, decoding ported | networks: 2,695/2,695 segments identical to PyTorch (Kaggle); boxes 402/402, grouping and decoding identical on 6 recorded pages; image operations bit-identical to OpenCV/Pillow except bilinear enlargement (±1 on 0.6% of pixels); real en/kn recognizers checked in CI |
-| M5 | The UI (upload → review → export), all features | |
+| M5 | The app (`index.html`, `src/app`): models downloaded once from Hugging Face and cached, Tesseract.js + optional EasyOCR, GLiNER + rules, YOLO, page pipeline = `Redactor.analyse` | session 1: upload → boxes → redacted PNG; published by `.github/workflows/pages.yml` |
 | M6 | Deploy; measure the browser build on the benchmarks | |
 
 ## Parity with the Python pipeline

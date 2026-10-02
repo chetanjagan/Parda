@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parda — hide personal data in your documents, in your browser</title>
+  <link rel="stylesheet" href="app.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.mjs",
+      "tesseract.js": "https://cdn.jsdelivr.net/npm/tesseract.js@6/dist/tesseract.esm.min.js",
+      "@huggingface/transformers": "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.0/dist/transformers.min.js",
+      "pdfjs-dist": "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs"
+    }
+  }
+  </script>
+  <script type="module" src="build/app/main.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Parda <span class="tag">beta</span></h1>
+    <p>Hide Aadhaar, PAN, phone numbers, names, faces and signatures in Indian documents (English, हिन्दी, ಕನ್ನಡ).
+      <strong>Everything runs in your browser — your document is never uploaded.</strong></p>
+  </header>
+  <main>
+    <section class="card" id="controls">
+      <label>Document language
+        <select id="lang">
+          <option value="en">English</option>
+          <option value="hi-en">Hindi + English</option>
+          <option value="kn-en">Kannada + English</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="easyocr">
+        Better reading of phone photos <small id="easysize"></small></label>
+      <div id="drop" tabindex="0">Drop a PDF or photo here, or <button id="pick" type="button">choose a file</button>
+        <input type="file" id="file" accept="application/pdf,image/*" hidden></div>
+      <p class="note" id="firstrun">The first time, the app downloads its models (~580 MB) once; after that it works from your
+        browser's storage. <button id="clear" type="button" class="link">Remove downloaded models</button></p>
+    </section>
+    <section class="card hidden" id="status">
+      <div id="step"></div>
+      <ul id="downloads"></ul>
+    </section>
+    <section id="pages"></section>
+  </main>
+  <footer>Parda is a research demo trained on synthetic documents — always check the result before sharing.
+    Free, non-commercial use. <a href="https://huggingface.co/chetan-0804/parda-web-models">Models and licences</a></footer>
+</body>
+</html>
