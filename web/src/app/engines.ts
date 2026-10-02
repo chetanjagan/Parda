@@ -36,8 +36,9 @@ export class Models {
       await fetchJson(local("tokenizer_config.json"), "tokenizer", this.progress));
     const meta = await fetchJson<OnnxMeta>(`${MODEL_REPO}/gliner/parda_onnx.json`, "GLiNER settings", this.progress);
     const gl = await session(await fetchCached(`${MODEL_REPO}/gliner/model_int8_embed.onnx`, "GLiNER (personal data)", this.progress));
+    const wanted = new Set<string>(gl.inputNames); // the export dropped inputs mDeBERTa ignores (token_type_ids)
     this.gliner = new GlinerModel(async (feeds) => {
-      const r = await gl.run(await toTensors(feeds));
+      const r = await gl.run(await toTensors(Object.fromEntries(Object.entries(feeds).filter(([k]) => wanted.has(k)))));
       return { data: r.logits.data as Float32Array, dims: r.logits.dims as number[] };
     }, tok, meta);
     const yolo = await session(await fetchCached(`${MODEL_REPO}/yolo/parda-yolo.onnx`, "YOLO (faces, signatures)", this.progress));
