@@ -25,8 +25,10 @@ READER_LANGS = {"en": ["en"], "hi-en": ["hi", "en"], "kn-en": ["kn", "en"]}  # =
 
 
 def reader_for(lang):
+    """quantize=False: on CPU EasyOCR would otherwise compress its networks to 8-bit (which ONNX export cannot take).
+    The benchmarks ran EasyOCR on GPU, where it never quantizes, so the full-precision networks are the ones to match."""
     import easyocr
-    return easyocr.Reader(READER_LANGS[lang], gpu=False, verbose=False)
+    return easyocr.Reader(READER_LANGS[lang], gpu=False, quantize=False, verbose=False)
 
 
 def net(m):
