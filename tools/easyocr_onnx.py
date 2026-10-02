@@ -198,11 +198,19 @@ def check(onnx_dir, pages, n):
 
 
 # ------------------------------------------------------------------ recording for the TypeScript port
-def record(onnx_dir, pages, n, out, max_crops=40):
-    """Per page: the image, the detector's input and output, the boxes EasyOCR groups, the recognizer's inputs and
-    outputs (first max_crops crops), and readtext's result. Arrays go to one compressed .npz per page (float16)."""
+def record(onnx_dir, pages, n, out, max_crops=300):
+    """Per page, every stage separately (one compressed .npz per page):
+      page        the image exactly as EasyOCR decoded it (RGB uint8, also saved as PNG)
+      det_out     the detector's score maps, float32 (thresholds at 0.4 / 0.7 need full precision)
+      raw_boxes   get_textbox's boxes before grouping; horizontal_list / free_list after grouping (json)
+      rec_in_k    each recognizer input, as uint8 (exactly recoverable from the normalised [-1, 1] values)
+      rec_out_k   each recognizer output, float32
+    and readtext's result."""
+    import cv2
     import easyocr
     import numpy as np
+    from easyocr.detection import get_textbox
+    from easyocr.utils import reformat_input
     os.makedirs(os.path.join(out, "pages"), exist_ok=True)
     by_lang = {}
     for p in pages:
@@ -213,53 +221,65 @@ def record(onnx_dir, pages, n, out, max_crops=40):
         det, rec = net(reader.detector), net(reader.recognizer)
         for p in ps[:n]:
             stem = f"{lang}_{p['id']}"
-            shutil.copyfile(p["path"], os.path.join(out, "pages", stem + os.path.splitext(p["path"])[1]))
-            calls = {"det_in": [], "det_out": [], "rec_in": [], "rec_out": []}
+            img, grey = reformat_input(p["path"])  # what EasyOCR works on
+            cv2.imwrite(os.path.join(out, "pages", stem + ".png"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+            calls = {"det_out": [], "rec_in": [], "rec_out": []}
             df, rf = det.forward, rec.forward
 
             def det_rec(x, *a, **k):
                 y, f = df(x)
-                calls["det_in"].append(x.numpy())
-                calls["det_out"].append(y.numpy())
+                calls["det_out"].append(y.numpy().astype(np.float32))
                 return y, f
 
             def rec_rec(image, *a, **k):
                 y = rf(image)
                 if sum(len(v) for v in calls["rec_in"]) < max_crops:
-                    calls["rec_in"].append(image.numpy())
-                    calls["rec_out"].append(y.numpy())
+                    calls["rec_in"].append(np.rint((image.numpy() * 0.5 + 0.5) * 255).clip(0, 255).astype(np.uint8))
+                    calls["rec_out"].append(y.numpy().astype(np.float32))
                 return y
 
-            det.forward, rec.forward = det_rec, rec_rec
+            d = reader_defaults()
+            raw = get_textbox(reader.detector, img, canvas_size=d["canvas_size"], mag_ratio=d["mag_ratio"],
+                              text_threshold=d["text_threshold"], link_threshold=d["link_threshold"], low_text=d["low_text"],
+                              poly=False, device="cpu", optimal_num_chars=None, threshold=d["threshold"],
+                              bbox_min_score=d["bbox_min_score"], bbox_min_size=d["bbox_min_size"],
+                              max_candidates=d["max_candidates"])
             horizontal, free = reader.detect(p["path"])
-            calls["det_in"], calls["det_out"] = [], []  # keep the detector call of readtext below
+            det.forward, rec.forward = det_rec, rec_rec
             result = readtext(reader, p["path"])
             det.forward, rec.forward = df, rf
-            arrays = {"det_in": calls["det_in"][0].astype(np.float16), "det_out": calls["det_out"][0].astype(np.float16)}
+            arrays = {"page": img, "det_out": calls["det_out"][0]}
             for k, v in enumerate(calls["rec_in"]):
-                arrays[f"rec_in_{k}"] = v.astype(np.float16)
-                arrays[f"rec_out_{k}"] = calls["rec_out"][k].astype(np.float16)
+                arrays[f"rec_in_{k}"] = v
+                arrays[f"rec_out_{k}"] = calls["rec_out"][k]
             np.savez_compressed(os.path.join(out, "pages", stem + ".npz"), **arrays)
-            cases.append({"id": p["id"], "lang": lang, "image": stem + os.path.splitext(p["path"])[1], "npz": stem + ".npz",
-                          "horizontal_list": json.loads(json.dumps(horizontal[0], default=float)),
-                          "free_list": json.loads(json.dumps(free[0], default=float)),
-                          "rec_calls": len(calls["rec_in"]), "readtext": result})
-            print(f"{stem}: {len(result)} text segments, det input {list(arrays['det_in'].shape)}, "
-                  f"{len(calls['rec_in'])} recognizer calls recorded", flush=True)
+            j = lambda x: json.loads(json.dumps(x, default=lambda v: v.tolist() if hasattr(v, "tolist") else float(v)))  # noqa: E731
+            cases.append({"id": p["id"], "lang": lang, "page_png": stem + ".png", "npz": stem + ".npz",
+                          "page_hw": list(img.shape[:2]), "det_out_shape": list(arrays["det_out"].shape),
+                          "raw_boxes": j(raw[0]), "horizontal_list": j(horizontal[0]), "free_list": j(free[0]),
+                          "rec_calls": [list(v.shape) for v in calls["rec_in"]], "readtext": result})
+            print(f"{stem}: {len(j(raw[0]))} raw boxes -> {len(horizontal[0])} lines + {len(free[0])} tilted -> "
+                  f"{len(result)} text segments | {len(calls['rec_in'])} recognizer calls", flush=True)
     meta = json.load(open(os.path.join(onnx_dir, "easyocr_onnx.json")))
-    import inspect
-    meta["readtext_defaults"] = {k: (v.default if v.default is not inspect.Parameter.empty else None)
-                                 for k, v in inspect.signature(easyocr.Reader.readtext).parameters.items() if k != "self"}
+    meta["readtext_defaults"] = reader_defaults()
     meta["easyocr_version"] = getattr(easyocr, "__version__", None)
+    meta["opencv_version"] = cv2.__version__
     json.dump({"meta": meta, "cases": cases}, open(os.path.join(out, "easyocr_goldens.json"), "w"), ensure_ascii=False,
               default=str)
     src = os.path.dirname(easyocr.__file__)  # EasyOCR's own code: the port follows it
     with zipfile.ZipFile(os.path.join(out, "easyocr_src.zip"), "w", zipfile.ZIP_DEFLATED) as z:
-        for d, _, fs in os.walk(src):
+        for d_, _, fs in os.walk(src):
             for f in fs:
                 if f.endswith(".py") or f.endswith(".yaml"):
-                    z.write(os.path.join(d, f), os.path.relpath(os.path.join(d, f), os.path.dirname(src)))
+                    z.write(os.path.join(d_, f), os.path.relpath(os.path.join(d_, f), os.path.dirname(src)))
     return cases
+
+
+def reader_defaults():
+    import inspect
+    import easyocr
+    return {k: (v.default if v.default is not inspect.Parameter.empty else None)
+            for k, v in inspect.signature(easyocr.Reader.readtext).parameters.items() if k != "self"}
 
 
 def main(argv=None):
