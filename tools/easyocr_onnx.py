@@ -50,6 +50,24 @@ def first_call(module, fn):
     return seen["call"]
 
 
+def exportable(model):
+    """AdaptiveAvgPool2d((None, 1)) ("keep this axis, average the last one to 1") cannot be exported with a dynamic
+    width; it is exactly a mean over the last axis, so swap it for that (in place; only used for the export)."""
+    import torch
+
+    class MeanLast(torch.nn.Module):
+        def forward(self, x):
+            return x.mean(dim=-1, keepdim=True)
+
+    swapped = []
+    for name, mod in list(model.named_modules()):
+        for child_name, child in list(mod.named_children()):
+            if isinstance(child, torch.nn.AdaptiveAvgPool2d) and tuple(child.output_size) == (None, 1):
+                setattr(mod, child_name, MeanLast())
+                swapped.append(f"{name}.{child_name}".strip("."))
+    return swapped
+
+
 def sample_image(pages, lang):
     p = next((p for p in pages if p["lang"] == lang), pages[0])
     return p["path"]
@@ -89,6 +107,14 @@ def export(out, pages, opset=17):
             meta["detector"] = {"file": "craft.onnx", "input_shape": list(x.shape)}
         (img_t, text), _ = first_call(rec, lambda: reader.readtext(img))
         text_len = int(text.shape[1])
+        with torch.no_grad():
+            before = rec(img_t, text)
+        info["swapped_for_export"] = exportable(rec)
+        with torch.no_grad():  # the swap must not change anything
+            diff = float((rec(img_t, text) - before).abs().max())
+        if diff > 1e-5:
+            raise RuntimeError(f"replacing the pooling changed the recognizer output (max diff {diff})")
+        info["swap_max_diff"] = diff
 
         class Rec(torch.nn.Module):
             def __init__(self):
