@@ -193,3 +193,8 @@ fail the Aadhaar checksum), organisation names, hospital phone numbers.
   "visuals":  [{"label": "FACE", "bbox": [..]}]
 }
 ```
+
+## Copyright
+
+Copyright (C) 2026 Chetan Jagannatha. The code is licensed under the GNU AGPL v3 (see `LICENSE`).
+The models keep their own terms (see "Licences" above).
