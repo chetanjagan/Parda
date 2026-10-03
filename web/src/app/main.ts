@@ -6,7 +6,6 @@ import { auditOf, pdfOf, pngOf, redactedCanvas, save } from "./export.js";
 import { lib, LIBS } from "./libs.js";
 import { clearModelCache } from "./models.js";
 import { loadFile, type PageImage } from "./pages.js";
-import { filterSpans } from "../core/context.js";
 import { genderSpans } from "./gender.js";
 import { blackouts } from "./pipeline.js";
 import { buildItems, finalRegions, type Group, groupOf, type Item, occurrences, Review } from "./review.js";
@@ -88,9 +87,8 @@ async function run(file: File) {
       const tOcr = (performance.now() - t0) / 1000;
       const res = await analyser.analyse(img.rgba, img.width, img.height, l, easy, segs,
         { progress, step: (s) => step(tag + s) }, $<HTMLInputElement>("lowpower").checked);
-      const streams = $<HTMLInputElement>("context").checked
-        ? res.streams.map((st) => ({ ...st, spans: filterSpans(st.text, st.spans) })) : res.streams;
-      const page = { width: img.width, height: img.height, streams, items: buildItems(streams, res.dets) };
+      // context rules (core/context.ts) were measured and rejected: they hid 1.5 points less real PII (results/context_rules)
+      const page = { width: img.width, height: img.height, streams: res.streams, items: buildItems(res.streams, res.dets) };
       d.pages.push({ img, review: new Review(page), timings: { ocr_tesseract: tOcr, ...res.timings } });
       d.device = res.device;
     }
@@ -321,7 +319,7 @@ function init() {
     for (const p of doc.pages) p.review.setGender($<HTMLInputElement>("gender").checked, genderSpans);
     render();
   });
-  for (const id of ["easyocr", "context", "lowpower", "gender"]) { // remembered in this browser
+  for (const id of ["easyocr", "lowpower", "gender"]) { // remembered in this browser
     const el = $<HTMLInputElement>(id);
     try { el.checked = localStorage.getItem(`parda-${id}`) === "1"; } catch { /* storage off */ }
     el.addEventListener("change", () => { try { localStorage.setItem(`parda-${id}`, el.checked ? "1" : "0"); } catch { /* storage off */ } });

@@ -1,272 +1,185 @@
-# Parda — Multilingual PII Redaction for Indian Documents
+# Parda — hide personal data in Indian documents, in your browser
 
-Parda finds and blacks out personal data in scanned and photographed Indian documents: Aadhaar, PAN, UPI IDs,
-bank accounts, phone numbers, addresses, names in Hindi / Kannada / English, plus faces, signatures, QR codes
-and stamps. It combines two OCR engines, a fine-tuned multilingual NER model (GLiNER), checksum rules and a
-YOLO detector, and is measured end to end on the pixels it actually blacks out.
+**Try it: [chetanjagan.github.io/Parda](https://chetanjagan.github.io/Parda/)** — your document never leaves your device.
 
-> Research / portfolio project. All training documents are **synthetic**. No real personal
-> data is collected or used. Generated ID cards are watermarked `SPECIMEN`.
+Parda (परदा, "curtain") finds and blacks out personal data in Indian documents — loan forms, payslips, ID cards,
+rent agreements, bank statements, hospital papers — in **English, Hindi and Kannada**, scanned or photographed with a
+phone. It hides Aadhaar and PAN numbers, phone numbers, emails, names, addresses, dates of birth, bank and UPI
+details, and nine more ID types, plus **faces, signatures, QR codes and stamps**.
 
-## Headline results
+It runs **entirely in the browser**: OCR, a fine-tuned GLiNER model, checksum rules and a YOLO detector, all on your
+own machine (WebGPU when available), so nothing is uploaded. You review what was found, fix anything, and download a
+flattened PDF in which no hidden text survives under the bars.
 
-Share of all personal-data items fully hidden (text + visual), 300 pages per benchmark, 3 languages:
+## Results
 
-| System | Seen templates | Unseen layouts + phone photos |
+On 300 held-out pages from the training templates (**seen**) and 300 pages of **unseen document types
+photographed with a phone**. A page counts as protected only when every piece of personal data on it is covered
+in the output image (measured on pixels, not text).
+
+| All personal data fully hidden | Seen templates | Unseen layouts + phone photos |
 |---|---|---|
-| Rules only (regex + checksums) | 18.7% | 17.9% |
+| ID rules only (regex + checksums) | 18.7% | 17.9% |
 | Off-the-shelf GLiNER + rules | 51.3% | 38.9% |
-| **Parda v1** (fine-tuned GLiNER, 2 OCR engines, YOLO) | 96.1% | 82.5% |
-| **Parda v2** (text model also trained on phone photos + EasyOCR) | **97.2%** | **87.4%** |
+| Parda v1 | 96.1% | 82.5% |
+| **Parda v2** (two OCR engines + fine-tuned GLiNER + rules + YOLO) | **97.2%** | **87.4%** |
+| Parda in the browser (Tesseract.js + EasyOCR, same models) | **96.8%** | **86.6%** |
 
-- **Unseen** = 4 document types never used in training (bank statement, KYC form, pharmacy bill, offer letter),
-  photographed with a phone. Even languages: about 82–83% each for v1 on unseen photos.
-- Scored strictly: a text item counts only if **every word** is ≥90% blacked out; a visual item if ≥95% of its box is.
-  Measured on the ink instead, **99.3%** of signature ink is hidden on the unseen photos (the box rule under-counts
-  tilted signatures), which puts v2 at **≈89.7%** there.
-- Pages with **nothing** leaking, v2: 74.7% (seen), 36.3% (unseen). Addresses remain the hardest type (63–67%).
-- Over-redaction (blacked-out area that is not PII), v2: 38.3% (seen), 44.9% (unseen). Parda errs on the side of hiding.
+| Parda v2 | Seen | Unseen + photos |
+|---|---|---|
+| Pages with no leak at all | 74.7% | 36.3% |
+| Over-redaction (extra black pixels) | 38% | 45% |
 
-## Status
+Faces, signatures, QR codes and stamps: **100%** found (YOLO11n, mAP50 1.000) vs 7.2% for an OpenCV baseline;
+99.3% of signature ink hidden even on tilted pages.
 
-- [x] **Phase 1 — Synthetic document generator** (30,000 docs, 0 errors)
-- [x] **Phase 2 — OCR benchmark** (Tesseract / EasyOCR / PaddleOCR on English, Hindi, Kannada)
-- [x] **Phase 3 — Text PII model** (GLiNER fine-tuned on clean + noisy-OCR text: 60.0% → 80.4% fully redacted)
-- [x] **Phase 4 — Visual PII detector** (YOLO11n: 7.2% → 100% of visual PII fully redacted vs OpenCV)
-- [x] **Phase 5 — Full pipeline + end-to-end benchmark** (96.1% of all PII fully redacted; rules only 18.7%)
-- [x] **Real-world test** (unseen layouts + phone photos: 82.5%; off-the-shelf 38.9%)
-- [x] **Text model v2** (phone-photo + EasyOCR training: 87.4% on unseen photos, 97.2% on seen templates)
-- [x] **Phase 6, step 1 — Models for the browser** (ONNX, 0.0-point loss; GLiNER 1.1 GB → 555 MB)
-- [ ] Phase 6, step 2 — In-browser web app
+## What's in the app
 
-## Repo layout
+- **Upload** a PDF or photo; pick English, हिन्दी + English or ಕನ್ನಡ + English.
+- **Review**: highlights by group (ID numbers, people, contact and address, faces and marks); click to keep an item
+  visible, drag to hide anything missed, "+N more" hides every other place the same text appears, undo / redo,
+  masked Aadhaar (last 4 digits visible), optional "also hide gender", and the raw OCR text to see why something
+  was missed.
+- **Export**: a flattened PDF or PNG, plus an audit file listing what was hidden and where — never the text itself.
+- Models download once (~580 MB; the phone-photo reader adds 93 MB, 284 MB for Hindi) and stay in the browser.
+
+## How the browser version was built and verified
+
+The benchmarks measured the Python pipeline, so the browser had to redact exactly the same things.
+
+| Step | Result |
+|---|---|
+| GLiNER → ONNX | full precision: 100% the same spans as PyTorch. Plain 8-bit of every layer kept only 36%; quantizing only the word-embedding table halved the model (1.1 GB → 555 MB) with **0.0 points** lost on both benchmarks |
+| Export bug | GLiNER passes the word count as a Python list, which the exporter froze; the packed LSTM was replaced, for export only, by an exact equivalent fed by a real length input |
+| YOLO → ONNX | identical boxes; the browser letterbox reproduces OpenCV's integer resize (within 1 brightness level on ≤ 0.012% of pixels) |
+| EasyOCR → ONNX | **2,695 / 2,695** text segments identical to PyTorch on 60 pages |
+| TypeScript port | ID rules, reading order, box mapping, GLiNER input building and decoding, YOLO and EasyOCR pre/post-processing, each checked against **golden files** recorded from the Python code; the real tokenizer matches on every recorded word |
+| Browser OCR | Tesseract.js within ~1 point of native Tesseract end to end; browser EasyOCR reads 95% of segments identically (100% on scans) |
+
+**51 tests** run on every push (GitHub Actions), including the real tokenizer, YOLO and EasyOCR networks, and a
+second job re-runs the Python side so the two versions cannot drift apart.
+
+**Speed** (MacBook Air, Chrome, WebGPU + 7 CPU threads, with the phone-photo reader on): English form 43.6 s →
+11.4 s, Kannada card 15.0 s → 3.8 s, Hindi phone photo 165.2 s → **17.1 s**.
+
+## Tried and rejected
+
+- **Context rules** to cut false bars on bank statements (a date of birth needs a "birth" label, an unspaced 12-digit
+  number needs an Aadhaar label, no spans cutting through numbers): they hid **1.5 points less real PII** for a
+  negligible drop in over-redaction, so they were removed from the app. See `results/context_rules/`.
+- **Naive 8-bit quantization** of GLiNER (36% agreement) and **16-bit conversion** (would not load) — see `results/onnx/`.
+
+## Limitations
+
+- Trained and benchmarked on **synthetic documents**; not yet measured on real scans.
+- On unseen document types it **over-redacts** (bank statements: reference numbers, amounts, transaction dates), and on
+  phone photos only 36% of pages have no leak at all. **Always review the result before sharing.**
+- The Hindi photo reader is large (205 MB) and slow on machines without WebGPU.
+- Very large PDFs are processed page by page in memory; phones may run out of memory with the 555 MB text model.
+
+## Licences
+
+- **YOLO11** (Ultralytics) is **AGPL-3.0**, so the app's source is public under AGPL-3.0.
+- The face detector was trained with **CelebA**, which is for **non-commercial research only**.
+- GLiNER base (`urchade/gliner_multi_pii-v1`) Apache-2.0; mDeBERTa-v3 MIT; EasyOCR Apache-2.0; Tesseract Apache-2.0.
+- **Free, non-commercial research and demonstration use.** Commercial use would need a face detector trained
+  without CelebA. Models: [huggingface.co/chetan-0804/parda-web-models](https://huggingface.co/chetan-0804/parda-web-models).
+
+---
+
+## The pipeline
 
 ```
-parda/synth/
-  ids.py          fake Indian IDs with real checksum rules (Aadhaar Verhoeff, GSTIN, PAN...)
-  names.py        names in English/Hindi/Kannada, places, fake person generator
-  canvas.py       draws text word-by-word and records exact boxes + labels
-  visuals.py      signatures, QR codes, stamps, photos, SPECIMEN watermark
-  templates.py    5 training document types: loan form, payslip, ID card, rent agreement, discharge summary
-  augment.py      scan degradation (boxes follow rotation)
-  generate.py     parallel generator -> images/ + annotations.jsonl
-  visualize.py    draws boxes on samples for checking
-  ood.py          real-world test: 4 unseen document types + phone-photo damage (perspective, shadow, blur)
-  photo_pages.py  phone-photo versions of TRAINING pages (for text model v2)
-parda/ocr/
-  engines.py      Tesseract, EasyOCR, PaddleOCR (+ oracles for testing) behind one interface
-  run_ocr.py      runs an engine on a fixed stratified sample; resumable
-  textnorm.py     normalisation, CER, fuzzy substring distance
-  evaluate.py     page CER, per-script word accuracy, PII recovery per entity -> report.md + charts
-parda/pii/
-  labels.py       PII codes <-> natural-language names GLiNER sees
-  spans.py        tokenisation, windows, reading order, LABEL TRANSFER onto OCR text
-                  (word-level by position; line-level EasyOCR by character alignment)
-  rules.py        regex + checksum detector (handles Devanagari / Kannada digits)
-  build_data.py   clean + noisy-OCR training data from several OCR sources (benchmark pages excluded)
-  ocr_pages.py    OCR a chosen set of pages with one engine (resumable)
-  train_gliner.py fine-tuning (dry-run / smoke / full), uploads the model to a private HF repo
-  predict.py      rules / GLiNER (windowed) / union predictors
-  evaluate_pii.py text-level redaction metrics on the 300 benchmark pages
-parda/vision/
-  classes.py      FACE, SIGNATURE, QR_CODE, STAMP (YOLO class ids)
-  faces.py        swaps the synthetic avatars for real face photos (separate train / held-out face pools)
-  yolo_data.py    YOLO dataset: train / val / fixed benchmark split, labels, previews
-  detectors.py    YOLO, OpenCV baseline (Haar faces + QR), gold/empty behind one interface
-  train_yolo.py   smoke / time-capped training, summary, uploads weights to a private HF repo
-  evaluate_vis.py fully-redacted %, detection, precision, AP50/mAP50, over-redaction
-  ink_check.py    how much of each visual item's actual ink is hidden (vs the strict box rule)
-parda/pipeline/
-  boxes.py        text spans -> pixel boxes, gap filling, masks, drawing
-  redactor.py     OCR -> text PII + visual PII -> regions to redact (+ audit entries, never the PII text)
-  redact.py       CLI: redact images / multi-page TIFFs / PDFs / iPhone HEIC -> redacted PDF + audit JSON
-  models.py       loads the fine-tuned GLiNER and YOLO from a local path or your private HF repos
-  evaluate_e2e.py end-to-end pixel-level benchmark with an ablation (one component at a time)
-parda/export/
-  onnx_export.py  version-proof ONNX export of GLiNER (records the exact network inputs) and YOLO
-  lstm_patch.py   exact, export-friendly replacement for GLiNER's packed LSTM (lengths become a real input)
-  onnx_runtime.py runs an exported GLiNER inside the normal GLiNER object (pads to the export size)
-  compress.py     compression variants of the exported GLiNER, chosen by agreement with PyTorch
-parda/fsutil.py   folder search that never lists huge folders in full (fast on Kaggle mounts)
-notebooks/        01–10: one Kaggle notebook per step (see below)
-tests/            77 tests in 9 files; a perfect system must score exactly 100%, an empty one 0%
-scripts/          Kaggle setup (fonts, Tesseract language packs, EasyOCR)
+page image ─┬─ Tesseract ─┐                      ┌─ GLiNER (fine-tuned, 18 labels) ─┐
+            │             ├─ text in reading order┤                                  ├─ spans ─ boxes ─ gap fill ─┐
+            └─ EasyOCR ───┘   (per OCR engine)   └─ ID rules (regex + checksums) ──┘                            ├─ black bars
+            └─ YOLO11n: faces, signatures, QR codes, stamps ────────────────────────────────────────────────────┘
 ```
 
-## Quick start
+Each OCR engine's text is searched separately and every finding is hidden (two engines catch what one misreads).
+Text spans are mapped back to word boxes, partial matches cut by character position, and nearby boxes of the same
+type joined so no gaps leak between words.
+
+## Phase by phase
+
+| Phase | What | Key result |
+|---|---|---|
+| 1. Synthetic data | 30,000 labelled documents (5 types, 3 languages, scan and photo damage) | `parda/synth/` |
+| 2. OCR benchmark | Tesseract, EasyOCR, combined | PII found 71% → 85.4% with both (Hindi 63% → 79%) |
+| 3. Text model | GLiNER fine-tuned on 25k OCR'd pages | 80.4% of pages fully redacted vs 60.0% off-the-shelf (text only) |
+| 4. Visual model | YOLO11n on 12k pages with real faces | 100% fully redacted, mAP50 1.000, 0.035 s/page |
+| 5. Full pipeline | everything together | 96.1% (v1) |
+| Real-world test | 4 unseen document types, phone photos | 82.5% (v1) |
+| Text model v2 | + phone-photo and EasyOCR training text | 97.2% / 87.4% |
+| 6. Browser | ONNX, TypeScript port, app, WebGPU | see above |
+
+Details and full tables: `results/phase2/` … `results/phase5/`, `results/ood/`, `results/text_v2/`, `results/onnx/`,
+`results/browser_ocr/`, `results/context_rules/`, and `web/README.md` for the browser milestones.
+
+## Repository
+
+```
+parda/
+  synth/      synthetic documents (templates, IDs with valid checksums, names, scan and photo damage)
+  ocr/        OCR engines, reading order, OCR benchmark
+  pii/        labels, ID rules, GLiNER training and prediction, label transfer onto OCR text, context rules
+  vision/     YOLO data, training, evaluation, ink check
+  pipeline/   boxes, redactor, CLI, end-to-end benchmark
+  export/     ONNX export (version-proof), LSTM replacement, compression
+web/
+  src/core     ID rules, reading order, boxes, gap fill, audit (TypeScript)
+  src/gliner   tokenizer, input building, decoding
+  src/vision   letterbox, YOLO decoding
+  src/ocr      Tesseract.js
+  src/easyocr  CRAFT post-processing, grouping, cropping, CTC decoding
+  src/app      the app: background worker, review, export
+  test/        golden-file parity tests
+tools/        golden-file recorders (Python) for the browser tests
+notebooks/    one Kaggle notebook per step (01–15)
+results/      reports for every phase
+tests/        Python tests
+```
+
+## Notebooks (Kaggle, free GPUs)
+
+| Notebook | What | Accelerator |
+|---|---|---|
+| 01–03, 03a | synthetic data, OCR benchmark, GLiNER v1 | CPU / GPU |
+| 04–05 | YOLO, full pipeline benchmark | GPU |
+| 06–07 | real-world test, visual ink check | GPU |
+| 08a / 08b | phone-photo training pages; GLiNER v2 + both benchmarks | CPU / GPU |
+| 09 / 10 | ONNX export; compression and benchmarks | CPU |
+| 11 / 12 | GLiNER and YOLO golden recordings for the browser port | CPU |
+| 13 | Tesseract.js on both benchmarks | CPU |
+| 14 | EasyOCR to ONNX, parity, recordings | CPU |
+| 15 | context rules on both benchmarks | CPU |
+
+## Run it yourself
 
 ```bash
-bash scripts/setup_kaggle.sh          # fonts + packages (Kaggle); locally: pip install -r requirements.txt
-python tests/test_synth.py            # every test file prints one "ok" line per test
+pip install -r requirements.txt
+python tests/test_synth.py                      # every test file prints one "ok" per test
 python -m parda.synth.generate --n 200 --out data/synth --workers 4
-python -m parda.synth.visualize --data data/synth --k 20
-```
 
-## Redact your own documents
-
-```bash
-pip install pymupdf pillow-heif                       # PDF input, iPhone photos
+# redact documents with the Python pipeline
+pip install pymupdf pillow-heif
 python -m parda.pipeline.redact scan.jpg form.pdf --out_dir redacted/ --lang auto \
        --gliner <you>/parda-gliner-v2 --yolo <you>/parda-yolo-v1 --ocr tesseract,easyocr
-```
-Writes `<name>_redacted.pdf` (image-only, so no hidden text survives under the boxes) and `<name>_audit.json`
-(type, box, confidence and source of every redaction, never the PII text itself). `--preview` draws outlines
-instead of black boxes.
 
-## Phase 2: OCR benchmark
-
-```bash
-bash scripts/setup_ocr.sh
-python -m parda.ocr.run_ocr --engine tesseract --per_lang 100 --workers 4 --out outputs/ocr_bench
-python -m parda.ocr.run_ocr --engine easyocr   --per_lang 100 --out outputs/ocr_bench
-python -m parda.ocr.evaluate --out outputs/ocr_bench
-```
-Key metric: **PII exact**, the share of personal-data items OCR reads perfectly. Redaction can only hide what OCR
-can read. Combining engines lifts PII found from 71% to 85.4% (Hindi 63% → 79%). Results: `results/phase2/`.
-
-## Phase 3: text PII model
-
-The model is trained on **Tesseract's actual (noisy) reading** of the documents, not only clean text. True labels
-are transferred onto OCR words by position, so `SBINO364507` at an IFSC position is taught as an IFSC.
-
-```bash
-python -m parda.pii.build_data --ocr <ocr_train>/ocr_tesseract.jsonl --clean_docs 10000 --out data/gliner
-python -m parda.pii.train_gliner --data_dir data/gliner --out outputs/gliner --smoke   # 2-min check
-python -m parda.pii.train_gliner --data_dir data/gliner --out outputs/gliner --epochs 1
-python -m parda.pii.evaluate_pii --ocr outputs/bench/ocr_tesseract.jsonl --ft outputs/gliner/final
+# the browser code and its parity tests
+cd web && npm install && npm test
 ```
 
-| System (300 held-out scanned pages, Tesseract text) | Fully redacted | Over-redaction | en | hi-en | kn-en |
-|---|---|---|---|---|---|
-| Rules only | 21.4% | 7.6% | 26.1% | 15.1% | 23.4% |
-| Off-the-shelf GLiNER + rules | 60.0% | 29.1% | 66.9% | 62.3% | 51.4% |
-| **Fine-tuned GLiNER** | **80.4%** | **10.4%** | **79.7%** | **85.5%** | **76.0%** |
-
-Fine-tuned on 25,028 clean + OCR-noisy examples in 54 min on one free Kaggle T4. Person names 39% → 82%,
-MRN 38% → 89%, Kannada 51% → 76%. Results: `results/phase3/`.
-
-## Phase 4: visual PII detector (YOLO11n)
-
-Phase 1 drew cartoon avatars as ID photos. Before training, `yolo_data.py` pastes a **real face photo** (CelebA)
-over every avatar: ~90% of the face photos are used for training, a disjoint ~10% only on the validation and
-benchmark pages, so the detector is never scored on a face it saw in training.
-
-```bash
-python -m parda.vision.yolo_data --out data/yolo --faces_dir <face photos> --n_train 12000 --n_val 600 --preview 6
-python -m parda.vision.train_yolo --data_yaml data/yolo/data.yaml --out outputs/yolo --epochs 40 --hours 4
-python -m parda.vision.evaluate_vis --yolo_data data/yolo --systems opencv,yolo --weights outputs/yolo/best.pt --out outputs/vis
-```
-
-| System (300 held-out pages, 600 visual boxes) | Fully redacted | Precision | mAP50 | Speed |
-|---|---|---|---|---|
-| OpenCV (Haar faces + QR detector) | 7.2% | 17.9% | 18.9% | 0.21 s/page |
-| **YOLO11n, fine-tuned** | **100%** | **100%** | **100%** | **0.035 s/page** |
-
-Faces 0% → 100%, signatures 0.6% → 100%, stamps 0% → 100%, QR codes 97.6% → 100%. Best epoch 39 of 49,
-177 min on one T4. Results: `results/phase4/`.
-
-## Phase 5: full pipeline + end-to-end benchmark
-
-Page → Tesseract + EasyOCR → fine-tuned GLiNER + rules on each reading → pixel boxes (+ gap fill) → YOLO →
-black boxes. Scored on the pixels actually blacked out; each row adds one component (notebook 05).
-
-| Configuration (seen templates, v1) | All PII fully hidden | Text | Visual | Pages with no leak |
-|---|---|---|---|---|
-| Rules only | 18.7% | 23.1% | 0% | 0% |
-| Off-the-shelf GLiNER + rules | 51.3% | 62.9% | 1.0% | 2.0% |
-| Fine-tuned GLiNER + rules | 69.1% | 85.0% | 0% | 4.0% |
-| + gap fill | 70.4% | 86.7% | 0% | 4.0% |
-| + EasyOCR (best of both) | 77.3% | 95.1% | 0% | 5.3% |
-| **+ YOLO visual = Parda v1** | **96.1%** | **95.1%** | **100%** | **68.0%** |
-
-Even across languages: en 96.1%, hi-en 95.6%, kn-en 96.4%. Employee IDs 24% → 95%, names 39% → 98%.
-Results: `results/phase5/`.
-
-## Real-world test: unseen layouts + phone photos
-
-`parda/synth/ood.py` makes **4 document types the models never saw**, photographed with a phone (desk,
-perspective tilt, shadow, blur, JPEG), with held-out faces and Aadhaar-lookalike reference numbers as hard
-negatives. Same end-to-end scoring (notebook 06).
-
-| Parda v1 | Seen templates | Unseen layouts + phone photos |
-|---|---|---|
-| All PII fully hidden | 96.1% | **82.5%** |
-| Text / visual | 95.1% / 100% | 83.6% / 73.7% |
-| Pages with no leak | 68.0% | 30.0% |
-
-On the unseen pages every component still helps: rules 17.9% → off-the-shelf 38.9% → fine-tuned 56.0% →
-+ EasyOCR 74.1% → + YOLO 82.5%. **Visual check (notebook 07):** YOLO found all 225 signatures; the 73.7% comes
-from the strict box rule on tilted wide signatures, while **99.3% of signature ink is hidden**.
-Results: `results/phase5/`.
-
-## Text model v2: trained on phone photos and EasyOCR
-
-v1 learned from clean text and Tesseract's mistakes on scans. v2 also learns from **6,000 phone-photo training
-pages** (read by Tesseract) and **2,400 EasyOCR readings**. EasyOCR returns whole lines, so labels are carried
-over by **character alignment** with the true text: 100% of labels land on exactly the right words on perfect
-text, 98–99% on noisy phone photos (notebooks 08a, 08b).
-
-| Full Parda | Seen templates | Unseen layouts + phone photos |
-|---|---|---|
-| All PII fully hidden, v1 → v2 | 96.1% → **97.2%** | 82.5% → **87.4%** |
-| Text PII, v1 → v2 | 95.1% → 96.5% | 83.6% → 89.1% |
-| Pages with no leak, v1 → v2 | 68.0% → 74.7% | 30.0% → 36.3% |
-| Over-redaction, v1 → v2 | 33.0% → 38.3% | 41.6% → 44.9% |
-
-On unseen photos: addresses 52% → 67%, UPI IDs 78% → 88%, names 84% → 90%, Aadhaar 96% → 100%.
-The test layouts stay unseen; the photo damage matches the training augmentation, so part of the gain is
-robustness to phone photos. Model: private HF repo `parda-gliner-v2`. Results: `results/text_v2/`.
-
-## Phase 6, step 1: models for the browser (ONNX)
-
-Both models are exported to ONNX (the format browsers run) and checked against PyTorch on both full benchmarks
-(notebooks 09, 10).
-
-| Model | Size | Same PII spans as PyTorch | All PII hidden, seen / unseen (full Parda) |
-|---|---|---|---|
-| GLiNER v2, PyTorch | 1.16 GB | – | 97.2% / 87.4% |
-| GLiNER v2, ONNX fp32 | 1,104 MB | 100% | 97.2% / 87.4% |
-| GLiNER v2, plain INT8 (every layer) | 338 MB | 36.2% | 75.7% / 59.8% |
-| **GLiNER v2, INT8 word-embedding table only (shipped)** | **555 MB** | **99.0%** | **97.2% / 87.4%** |
-| YOLO11n, ONNX | 10.4 MB | (fully redacted 100%, mAP50 1.000, same as PyTorch) | |
-
-What it took:
-- **Frozen lengths.** GLiNER passes the word count to its network as a Python list, so a plain export froze it and
-  any other text length crashed in the LSTM. The export now replaces GLiNER's packed LSTM with an exact equivalent
-  that takes the real lengths as an input (checked against the original before exporting), and pads every text to
-  a fixed 256 words, cutting the padding off the output.
-- **Compression.** Quantizing the matrix multiplications of mDeBERTa (per-tensor or per-channel) destroys it
-  (0–36% agreement); 16-bit conversion produced a model onnxruntime cannot load. Quantizing only the
-  word-embedding table (most of the file) halves the size with no measurable loss.
-- **Browser build (Tesseract only, no EasyOCR):** 89.7% on seen templates, **67.6%** on unseen phone photos
-  (vs 87.4% with both OCR engines). A second OCR engine that runs in the browser is worth ~20 points on photos.
-
-Models: private HF repo `parda-onnx-v1`. Results: `results/onnx/`.
-
-## Notebooks (Kaggle)
-
-| Notebook | What it does | Hardware |
-|---|---|---|
-| 01 | generate the 30,000 synthetic documents | CPU |
-| 02 | OCR benchmark | GPU |
-| 03a / 03 | OCR the training pages; train GLiNER v1 | CPU / GPU |
-| 04 | build the YOLO dataset (real faces), train YOLO11n | GPU |
-| 05 | full pipeline + end-to-end benchmark | GPU |
-| 06 | real-world test: unseen layouts + phone photos | GPU |
-| 07 | visual ink check | CPU |
-| 08a / 08b | phone-photo training pages; train GLiNER v2 + both benchmarks | CPU / GPU |
-| 09 | export GLiNER v2 and YOLO to ONNX, check against PyTorch | CPU |
-| 10 | compress GLiNER for the browser, pick the smallest accurate variant, both benchmarks | CPU |
+The web app is plain TypeScript compiled by `tsc` (libraries from a CDN, models from Hugging Face) and published by
+`.github/workflows/pages.yml`.
 
 ## Labels
 
-Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID
-PASSPORT VEHICLE_REG UAN ABHA EMPLOYEE_ID MRN`
+Text: `PERSON_NAME AADHAAR PAN PHONE EMAIL ADDRESS DOB BANK_ACCOUNT IFSC UPI_ID GSTIN VOTER_ID PASSPORT VEHICLE_REG
+UAN ABHA EMPLOYEE_ID MRN` (+ optional `GENDER` in the app). Visual: `FACE SIGNATURE QR_CODE STAMP`.
 
-Visual: `FACE SIGNATURE QR_CODE STAMP`
-
-Unlabelled on purpose (hard negatives): amounts, non-birth dates, reference numbers
-(including 12-digit numbers that fail the Aadhaar checksum), organisation names, hospital phone numbers.
+Unlabelled on purpose (hard negatives): amounts, non-birth dates, reference numbers (including 12-digit numbers that
+fail the Aadhaar checksum), organisation names, hospital phone numbers.
 
 ## Annotation format (`annotations.jsonl`, one line per image)
 
