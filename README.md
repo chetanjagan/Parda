@@ -14,8 +14,7 @@ flattened PDF in which no hidden text survives under the bars.
 ## Results
 
 On 300 held-out pages from the training templates (**seen**) and 300 pages of **unseen document types
-photographed with a phone**. A page counts as protected only when every piece of personal data on it is covered
-in the output image (measured on pixels, not text).
+photographed with a phone**. Each piece of personal data counts as hidden only when every one of its boxes is at least 90% covered by black pixels in the output image (95% for faces, signatures, QR codes and stamps); "pages with no leak" counts pages where every item is hidden.
 
 | All personal data fully hidden | Seen templates | Unseen layouts + phone photos |
 |---|---|---|
