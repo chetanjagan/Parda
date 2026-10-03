@@ -10,3 +10,4 @@ wandb/
 *.safetensors
 assets/fonts/*.ttf
 .env
+.DS_Store
