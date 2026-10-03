@@ -3,7 +3,7 @@ import type { Segment } from "../core/spans.js";
 import type { Detection } from "../vision/yolo.js";
 import type { Stream } from "./review.js";
 
-export interface AnalyseResult { streams: Stream[]; dets: Detection[]; timings: Record<string, number> }
+export interface AnalyseResult { streams: Stream[]; dets: Detection[]; timings: Record<string, number>; device?: { gpu: boolean; threads: number } }
 export interface Callbacks { progress?(label: string, done: number, total: number): void; step?(text: string): void }
 
 export class Analyser {
@@ -20,7 +20,7 @@ export class Analyser {
       if (!p) return;
       if (m.type === "progress") p.cb.progress?.(m.label, m.done, m.total);
       else if (m.type === "step") p.cb.step?.(m.text);
-      else if (m.type === "result") { this.pending.delete(m.id); p.resolve({ streams: m.streams, dets: m.dets, timings: m.timings }); }
+      else if (m.type === "result") { this.pending.delete(m.id); p.resolve({ streams: m.streams, dets: m.dets, timings: m.timings, device: m.device }); }
       else if (m.type === "error") { this.pending.delete(m.id); p.reject(new Error(m.message)); }
     };
     w.onerror = (e) => { for (const [, p] of this.pending) p.reject(new Error(e.message || "the background worker stopped")); this.pending.clear(); };

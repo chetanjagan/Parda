@@ -6,6 +6,17 @@
   <title>Parda — hide what's private before you share it</title>
   <meta name="description" content="Hide Aadhaar, PAN, phone numbers, names, faces and signatures in Indian documents. Runs entirely in your browser.">
   <link rel="stylesheet" href="app.css">
+  <script>
+    // Use all CPU cores: a small helper (sw.js) declares the page isolated; the first visit reloads once.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").then(() => {
+        if (!window.crossOriginIsolated && !sessionStorage.getItem("parda-isolation-tried")) {
+          sessionStorage.setItem("parda-isolation-tried", "1");
+          navigator.serviceWorker.ready.then(() => location.reload());
+        }
+      }).catch(() => {});
+    }
+  </script>
   <script type="module" src="build/app/main.js"></script>
 </head>
 <body>

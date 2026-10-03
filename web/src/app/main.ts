@@ -25,7 +25,7 @@ const GROUPS: Array<{ g: Group; title: string; css: string }> = [
 ];
 const css = (v: string) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-interface Doc { name: string; pages: Array<{ img: PageImage; review: Review; timings: Record<string, number> }> }
+interface Doc { name: string; device?: { gpu: boolean; threads: number }; pages: Array<{ img: PageImage; review: Review; timings: Record<string, number> }> }
 let doc: Doc | null = null;
 let current = 0;
 let view: "found" | "final" = "found";
@@ -88,6 +88,7 @@ async function run(file: File) {
         { progress, step: (s) => step(tag + s) });
       const page = { width: img.width, height: img.height, streams: res.streams, items: buildItems(res.streams, res.dets) };
       d.pages.push({ img, review: new Review(page), timings: { ocr_tesseract: tOcr, ...res.timings } });
+      d.device = res.device;
     }
     doc = d;
     current = 0;
@@ -199,7 +200,9 @@ function inspector() {
     read.append(h, pre);
   }
   const total = Object.values(timings).reduce((s, v) => s + v, 0);
-  $("timing").textContent = total > 0 ? `Took ${total.toFixed(1)} s on this device.` : "";
+  const dev = doc?.device;
+  const how = dev ? (dev.gpu ? `graphics chip + ${dev.threads} CPU thread${dev.threads > 1 ? "s" : ""}` : `${dev.threads} CPU thread${dev.threads > 1 ? "s" : ""}`) : "";
+  $("timing").textContent = total > 0 ? `Took ${total.toFixed(1)} s on this device${how ? ` (${how})` : ""}.` : "";
   $("maskrow").hidden = !items.some((i) => i.label === "AADHAAR");
   $<HTMLButtonElement>("undo").disabled = !review.canUndo();
   $<HTMLButtonElement>("redo").disabled = !review.canRedo();

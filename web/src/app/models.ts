@@ -1,7 +1,7 @@
 /** Model files: downloaded once from the public Hugging Face repo, cached in the browser (Cache Storage), and turned
  *  into onnxruntime-web sessions. onnxruntime-web, Tesseract.js and transformers.js come from the import map. */
 import type { Feed, OnnxMeta } from "../gliner/processor.js";
-import { LIBS } from "./libs.js";
+import { LIBS, ortLocal } from "./libs.js";
 
 export const MODEL_REPO = "https://huggingface.co/chetan-0804/parda-web-models/resolve/main";
 export const CACHE_NAME = "parda-models-v1";
@@ -51,21 +51,49 @@ export async function clearModelCache(): Promise<void> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ort = any;
 let ortPromise: Promise<Ort> | null = null;
+let siteBase = "";
+
+/** What this device gets: WebGPU and/or several CPU threads (shown to the user). */
+export const device = { gpu: false, threads: 1 };
+
+/** Call once (in the worker) with the site's address, before any model loads. */
+export function setSiteBase(base: string) { siteBase = base; }
 
 export function ort(): Promise<Ort> {
   ortPromise ??= (async () => {
-    const m: Ort = await import(/* @vite-ignore */ LIBS.ort);
-    const o = m.default ?? m;
-    o.env.wasm.wasmPaths = LIBS.ortWasm;
+    const g = globalThis as unknown as { crossOriginIsolated?: boolean; navigator?: { hardwareConcurrency?: number; gpu?: unknown } };
+    let o: Ort, local = false;
+    try { // our own copy first: needed for multi-core
+      const l = ortLocal(siteBase);
+      const m = await import(/* @vite-ignore */ l.module);
+      o = m.default ?? m;
+      o.env.wasm.wasmPaths = l.wasm;
+      local = true;
+    } catch {
+      const m = await import(/* @vite-ignore */ LIBS.ort);
+      o = m.default ?? m;
+      o.env.wasm.wasmPaths = LIBS.ortWasm;
+    }
     o.env.wasm.proxy = false; // this already runs inside the app's own worker
-    o.env.wasm.numThreads = 1; // threads need cross-origin isolation, which static hosting cannot set
+    device.threads = local && g.crossOriginIsolated ? Math.max(1, Math.min(8, (g.navigator?.hardwareConcurrency ?? 2) - 1)) : 1;
+    o.env.wasm.numThreads = device.threads;
+    device.gpu = !!g.navigator?.gpu;
     return o;
   })();
   return ortPromise;
 }
 
-export async function session(bytes: Uint8Array): Promise<Ort> {
+/** A session on the GPU when asked and available (falling back to the CPU), else on the CPU. */
+export async function session(bytes: Uint8Array, preferGpu = false): Promise<Ort> {
   const o = await ort();
+  if (preferGpu && device.gpu) {
+    try {
+      return await o.InferenceSession.create(bytes, { executionProviders: ["webgpu", "wasm"], graphOptimizationLevel: "all" });
+    } catch (e) {
+      console.warn("WebGPU not usable here, using the CPU:", e);
+      device.gpu = false;
+    }
+  }
   return o.InferenceSession.create(bytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
 }
 

@@ -26,8 +26,13 @@ jobs:
         working-directory: web
         run: |
           npx --yes -p typescript@5 tsc -p tsconfig.json
-          mkdir -p ../_site/public
-          cp index.html app.css ../_site/
+          mkdir -p ../_site/public ../_site/vendor/ort
+          cp index.html app.css sw.js ../_site/
+          # ONNX Runtime on Parda's own site: multi-core needs its worker files from the same address
+          mkdir -p /tmp/ort && cd /tmp/ort && npm init -y >/dev/null && npm install --no-audit --no-fund onnxruntime-web@1.20.1
+          cp node_modules/onnxruntime-web/dist/ort*.mjs node_modules/onnxruntime-web/dist/*.wasm "$GITHUB_WORKSPACE/_site/vendor/ort/"
+          cd "$GITHUB_WORKSPACE/web"
+          ls -la ../_site/vendor/ort
           cp -r build ../_site/build
           cp -r public/tokenizer ../_site/public/tokenizer
           ls -R ../_site | head -40

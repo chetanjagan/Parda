@@ -8,7 +8,7 @@ import type { OnnxMeta } from "../gliner/processor.js";
 import { loadTokenizer } from "../gliner/tokenizer.js";
 import { YoloDetector } from "../vision/detector.js";
 import { LIBS } from "./libs.js";
-import { fetchCached, fetchJson, floatRunner, MODEL_REPO, type Progress, type Runner, session, toTensors } from "./models.js";
+import { device, fetchCached, fetchJson, floatRunner, MODEL_REPO, type Progress, type Runner, session, setSiteBase, toTensors } from "./models.js";
 import { textPredictor } from "./pipeline.js";
 import type { Stream } from "./review.js";
 
@@ -32,7 +32,7 @@ async function loadCore(progress: Progress, base: string) {
     return { data: r.logits.data as Float32Array, dims: r.logits.dims as number[] };
   }, tok, meta);
   yolo = new YoloDetector(await floatRunner(await session(await fetchCached(`${MODEL_REPO}/yolo/parda-yolo.onnx`,
-    "Face and signature model (YOLO)", progress))));
+    "Face and signature model (YOLO)", progress), true)));
 }
 
 async function loadEasy(lang: string, progress: Progress): Promise<EasyOcrReader> {
@@ -40,9 +40,9 @@ async function loadEasy(lang: string, progress: Progress): Promise<EasyOcrReader
   if (have) return have;
   easyMeta ??= await fetchJson<EasyMeta>(`${MODEL_REPO}/easyocr/easyocr_onnx.json`, "Photo reader settings", progress);
   detector ??= await floatRunner(await session(await fetchCached(`${MODEL_REPO}/easyocr/${easyMeta.detector.file}`,
-    "Photo reader: text finder", progress)));
+    "Photo reader: text finder", progress), true));
   const r = easyMeta.readers[lang] ?? easyMeta.readers.en;
-  const rec = await floatRunner(await session(await fetchCached(`${MODEL_REPO}/easyocr/${r.file}`, `Photo reader: ${lang}`, progress)));
+  const rec = await floatRunner(await session(await fetchCached(`${MODEL_REPO}/easyocr/${r.file}`, `Photo reader: ${lang}`, progress), true));
   const reader = new EasyOcrReader(detector, rec, r);
   readers.set(lang, reader);
   return reader;
@@ -62,6 +62,7 @@ self.onmessage = async (e: MessageEvent) => {
   const timings: Record<string, number> = {};
   const timed = async <T>(k: string, f: () => Promise<T>) => { const t = performance.now(); const r = await f(); timings[k] = (performance.now() - t) / 1000; return r; };
   try {
+    setSiteBase(m.base);
     step("Getting the models ready");
     await loadCore(progress, m.base);
     const rgba = new Uint8ClampedArray(m.rgba);
@@ -70,13 +71,15 @@ self.onmessage = async (e: MessageEvent) => {
     if (m.easyocr) {
       const reader = await loadEasy(m.lang, progress);
       step("Reading the page again with the photo reader");
-      const segs = await timed("ocr_easyocr", async () => toSegments(await reader.readtext(rgba, m.width, m.height, 4)));
+      let last = 0;
+      const segs = await timed("ocr_easyocr", async () => toSegments(await reader.readtext(rgba, m.width, m.height, 4, undefined,
+        (done, total) => { const now = performance.now(); if (now - last > 250 || done === total) { last = now; step(`Reading line ${done} of ${total} with the photo reader`); } })));
       step("Finding personal data in what the photo reader saw");
       streams.push(await timed("text_pii_easyocr", () => stream("easyocr", segs)));
     }
     step("Looking for faces, signatures, QR codes and stamps");
     const dets = await timed("visual", () => yolo!.detect(rgba, m.width, m.height, 4));
-    post({ type: "result", id: m.id, streams, dets, timings });
+    post({ type: "result", id: m.id, streams, dets, timings, device: { ...device } });
   } catch (err) {
     post({ type: "error", id: m.id, message: String((err as Error)?.message ?? err) });
   }

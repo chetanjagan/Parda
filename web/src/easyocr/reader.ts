@@ -41,22 +41,27 @@ export class EasyOcrReader {
   }
 
   /** readtext(image, detail=1, paragraph=False). grey: the gray page (default: computed from the colour pixels). */
-  async readtext(pixels: Uint8Array | Uint8ClampedArray, w: number, h: number, channels = 4, grey?: Gray): Promise<TextResult[]> {
+  async readtext(pixels: Uint8Array | Uint8ClampedArray, w: number, h: number, channels = 4, grey?: Gray,
+    onLine?: (done: number, total: number) => void): Promise<TextResult[]> {
     const g = grey ?? rgbToGray(pixels, w, h, channels);
     const { horizontal, free } = await this.boxes(pixels, w, h, channels);
-    return this.recognizeBoxes(g, horizontal, free);
+    return this.recognizeBoxes(g, horizontal, free, onLine);
   }
 
   /** recognize(): each line box, then each tilted box, cropped and read on its own. */
-  async recognizeBoxes(g: Gray, horizontal: HBox[], free: FreeBox[]): Promise<TextResult[]> {
+  async recognizeBoxes(g: Gray, horizontal: HBox[], free: FreeBox[], onLine?: (done: number, total: number) => void): Promise<TextResult[]> {
     const out: TextResult[] = [];
+    const total = horizontal.length + free.length;
+    let done = 0;
     for (const b of horizontal) {
       const c = cropHorizontal(g, b);
       if (c) out.push({ box: c.box, ...(await this.read(c)) });
+      onLine?.(++done, total);
     }
     for (const b of free) {
       const c = cropFree(g, b);
       if (c) out.push({ box: c.box, ...(await this.read(c)) });
+      onLine?.(++done, total);
     }
     return out;
   }
