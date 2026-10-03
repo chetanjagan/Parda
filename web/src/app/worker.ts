@@ -8,7 +8,7 @@ import type { OnnxMeta } from "../gliner/processor.js";
 import { loadTokenizer } from "../gliner/tokenizer.js";
 import { YoloDetector } from "../vision/detector.js";
 import { LIBS } from "./libs.js";
-import { device, fetchCached, fetchJson, floatRunner, MODEL_REPO, type Progress, type Runner, session, setSiteBase, toTensors } from "./models.js";
+import { device, fetchCached, fetchJson, floatRunner, MODEL_REPO, type Progress, type Runner, session, setLowPower, setSiteBase, toTensors } from "./models.js";
 import { textPredictor } from "./pipeline.js";
 import type { Stream } from "./review.js";
 
@@ -63,6 +63,7 @@ self.onmessage = async (e: MessageEvent) => {
   const timed = async <T>(k: string, f: () => Promise<T>) => { const t = performance.now(); const r = await f(); timings[k] = (performance.now() - t) / 1000; return r; };
   try {
     setSiteBase(m.base);
+    setLowPower(!!m.lowPower);
     step("Getting the models ready");
     await loadCore(progress, m.base);
     const rgba = new Uint8ClampedArray(m.rgba);

@@ -14,14 +14,15 @@ export type Group = "ids" | "people" | "contact" | "visual" | "manual";
 export const GROUP_OF: Record<string, Group> = {
   AADHAAR: "ids", PAN: "ids", BANK_ACCOUNT: "ids", IFSC: "ids", UPI_ID: "ids", GSTIN: "ids", VOTER_ID: "ids",
   PASSPORT: "ids", VEHICLE_REG: "ids", UAN: "ids", ABHA: "ids", EMPLOYEE_ID: "ids", MRN: "ids",
-  PERSON_NAME: "people", DOB: "people",
+  PERSON_NAME: "people", DOB: "people", GENDER: "people",
   PHONE: "contact", EMAIL: "contact", ADDRESS: "contact",
   FACE: "visual", SIGNATURE: "visual", QR_CODE: "visual", STAMP: "visual",
 };
 export const groupOf = (label: string): Group => GROUP_OF[label] ?? "manual";
 
 /** Where an item came from in one OCR stream (or a visual / hand-drawn box). */
-export interface Part { source: string; order: number; start?: number; end?: number; boxes: BBox[]; score: number; added?: boolean }
+export interface Part { source: string; order: number; start?: number; end?: number; boxes: BBox[]; score: number; added?: boolean;
+  label?: string } // the span's own label: bars are drawn from it, so merged items keep the verified result
 
 export interface Item {
   id: number;
@@ -46,7 +47,7 @@ export function buildItems(streams: Stream[], dets: Detection[], visualConf = 0.
     const seen = new Map<string, number>(); // the k-th occurrence of a text in one stream matches the k-th in another
     st.spans.forEach((sp, order) => {
       const text = st.text.slice(sp.start, sp.end);
-      const part: Part = { source: st.source, order, start: sp.start, end: sp.end, score: sp.score,
+      const part: Part = { source: st.source, order, start: sp.start, end: sp.end, score: sp.score, label: sp.label,
         boxes: spanBoxes(sp.start, sp.end, st.ordered, st.offs) };
       const base = `${sp.label}|${norm(text)}`;
       const k = seen.get(base) ?? 0;
@@ -61,11 +62,38 @@ export function buildItems(streams: Stream[], dets: Detection[], visualConf = 0.
       }
     });
   });
+  const merged = mergeLabels(items);
+  items.length = 0;
+  items.push(...merged);
   dets.filter((d) => d.conf >= visualConf).forEach((d, order) => {
     items.push({ id: id++, label: d.label, kind: "visual", on: true,
       parts: [{ source: "yolo", order, boxes: [[...d.xyxy] as BBox], score: d.conf }] });
   });
   return items;
+}
+
+/** One label per item: items whose spans cover (nearly) the same text in the same stream become one item. The label
+ *  shown is the model's when it is confident (>= 0.6: it saw the context, e.g. "Bank A/C No"), else the most certain one
+ *  (an ID rule's checksum). Each part keeps its own label, so the bars are exactly what the pipeline draws. */
+export function mergeLabels(items: Item[]): Item[] {
+  const parent = items.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const same = (p: Part, q: Part) => p.source === q.source && p.start !== undefined && q.start !== undefined &&
+    Math.min(p.end!, q.end!) - Math.max(p.start, q.start) >= 0.8 * Math.min(p.end! - p.start, q.end! - q.start!);
+  for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+    if (items[i].kind === "text" && items[j].kind === "text" && items[i].parts.some((p) => items[j].parts.some((q) => same(p, q)))) {
+      parent[find(j)] = find(i);
+    }
+  }
+  const groups = new Map<number, Item[]>();
+  items.forEach((it, i) => groups.set(find(i), [...(groups.get(find(i)) ?? []), it]));
+  return [...groups.values()].map((g) => {
+    if (g.length === 1) return g[0];
+    const best = (it: Item) => Math.max(...it.parts.map((p) => p.score));
+    const model = g.filter((it) => best(it) < 1 && best(it) >= 0.6).sort((a, b) => best(b) - best(a));
+    const pick = model[0] ?? [...g].sort((a, b) => best(b) - best(a))[0];
+    return { ...pick, parts: g.flatMap((it) => it.parts.map((p) => ({ ...p, label: p.label ?? it.label }))) };
+  });
 }
 
 /** Aadhaar shown masked (as UIDAI's "masked Aadhaar"): the bar stops before the last 4 digits. */
@@ -93,10 +121,10 @@ export function finalRegions(page: PageState, opts: { maskAadhaar?: boolean } = 
     const regs: Region[] = [];
     for (const { it, p } of parts) {
       let boxes = p.boxes;
-      if (opts.maskAadhaar && it.label === "AADHAAR" && p.start !== undefined && p.end !== undefined) {
+      if (opts.maskAadhaar && (p.label ?? it.label) === "AADHAAR" && p.start !== undefined && p.end !== undefined) {
         boxes = spanBoxes(p.start, maskedEnd(st.text, p.start, p.end), st.ordered, st.offs);
       }
-      regs.push(...boxes.map((bbox) => ({ kind: "text" as const, label: it.label, bbox, score: p.score, source: st.source })));
+      regs.push(...boxes.map((bbox) => ({ kind: "text" as const, label: p.label ?? it.label, bbox, score: p.score, source: st.source })));
     }
     out.push(...fillGaps(regs));
   }
@@ -164,6 +192,31 @@ export class Review {
       added: true, parts: [{ ...p, added: true }] }));
     this.commit([...this.page.items, ...added]);
     return added.length;
+  }
+
+  /** Also hide gender (values next to a gender label), or stop hiding it. */
+  setGender(on: boolean, spansOf: (text: string) => Span[]) {
+    const rest = this.page.items.filter((i) => i.label !== "GENDER");
+    if (!on) { this.commit(rest); return; }
+    const added: Item[] = [];
+    const byKey = new Map<string, Item>();
+    for (const st of this.page.streams) {
+      const seen = new Map<string, number>();
+      for (const sp of spansOf(st.text)) {
+        const text = st.text.slice(sp.start, sp.end), base = norm(text), k = seen.get(base) ?? 0;
+        seen.set(base, k + 1);
+        const part: Part = { source: st.source, order: 2e6 + sp.start, start: sp.start, end: sp.end, score: 1, added: true,
+          label: "GENDER", boxes: spanBoxes(sp.start, sp.end, st.ordered, st.offs) };
+        const same = byKey.get(`${base}|${k}`);
+        if (same && !same.parts.some((p) => p.source === st.source)) same.parts.push(part);
+        else {
+          const it: Item = { id: this.nextId++, label: "GENDER", kind: "text", text, parts: [part], on: true, added: true };
+          added.push(it);
+          byKey.set(`${base}|${k}`, it);
+        }
+      }
+    }
+    this.commit([...rest, ...added]);
   }
 
   canUndo() { return this.past.length > 0; }

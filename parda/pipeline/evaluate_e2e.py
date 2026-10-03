@@ -268,6 +268,7 @@ def main(argv=None):
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--out", required=True)
     ap.add_argument("--title", default=None, help="report heading, e.g. 'Unseen layouts + phone photos'")
+    ap.add_argument("--context", default="", help="context rules after the model, e.g. dob,aadhaar,cut (parda/pii/context.py)")
     a = ap.parse_args(argv)
     from ..pii.predict import GLiNERPredictor, RulesPredictor, UnionPredictor
     from .models import gliner, yolo_weights
@@ -278,6 +279,10 @@ def main(argv=None):
     for key, path in (("base", a.gliner_base), ("ft", a.gliner_ft)):
         if path:
             text_systems[f"{key}+rules"] = UnionPredictor(GLiNERPredictor(gliner(path), a.threshold, name=key), rules)
+    if a.context:  # the same systems + the context rules (every configuration, so rows stay comparable)
+        from ..pii.context import ContextPredictor
+        ctx = tuple(r for r in a.context.split(",") if r)
+        text_systems = {k: ContextPredictor(v, ctx) for k, v in text_systems.items()}
     visual = None
     if a.yolo:
         from ..vision.detectors import YoloDetector

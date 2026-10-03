@@ -17,6 +17,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+from parda.pii.context import filter_spans  # noqa: E402
 from parda.pii.predict import merge_spans  # noqa: E402
 from parda.pii.rules import ascii_digits, find_rules  # noqa: E402
 from parda.pii.spans import build_ocr_text, tokenize, windows  # noqa: E402
@@ -79,6 +80,32 @@ def _rand_regions(rng):
     return regs
 
 
+CONTEXT_TEXTS = [
+    "Date of Birth: 10/11/2002\n13/03 SMS CHARGES 20,160\nजन्म तिथि: 01/02/1990\nಜನ್ಮ ದಿನಾಂಕ: 15/08/1985",
+    "Aadhaar No: 619752410246\n08/02 UPI/DR 383598852085 13,274\nआधार: 205397790251\nRef 6197 5241 0246",
+    "D.O.B 1990-01-02 | dob: 02/03/1991 | Born on 3 Jan 1992 | Period: 01 Jan 2026 to 30 Mar 2026",
+    "UID 205397790251, fluid 205397790251 and ಆಧಾರ್ ೨೦೫೩೯೭೭೯೦೨೫೧ then 12,345.67 debit",
+    "राशि ०१,२३४ जमा  Mobile 9844512345, 98450-12345",
+]
+
+
+def _context_cases(texts, rng):
+    """(text, spans) pairs: the ID-rule spans plus random spans labelled DOB / AADHAAR / PHONE / NAME, many of them
+    starting or ending inside numbers, so every context rule is exercised."""
+    cases = []
+    for t in texts:
+        spans = [dict(x) for x in find_rules(t)]
+        for _ in range(rng.randint(2, 8)):
+            if len(t) < 3:
+                break
+            a = rng.randrange(0, len(t) - 1)
+            b = min(len(t), a + rng.randint(1, 16))
+            spans.append({"label": rng.choice(["DOB", "AADHAAR", "PHONE", "PERSON_NAME"]), "start": a, "end": b,
+                          "score": round(rng.random(), 3)})
+        cases.append([t, spans])
+    return cases
+
+
 def _edge_regions():
     """Boxes exactly at the gap-fill limit (gap == 2.5 x height) and at the same-line limit (overlap == half)."""
     R = lambda lab, b, kind="text": {"kind": kind, "label": lab, "bbox": b, "score": 0.5, "source": "t"}  # noqa: E731
@@ -106,7 +133,8 @@ def compute(inputs):
            "fill_gaps": [fill_gaps(r) for r in inputs["region_sets"]],
            "pix": [list(pix(b, W, H, p)) for b, W, H, p in inputs["pix"]],
            "round": [[py_round(x, 1), py_round(x, 3)] for x in inputs["floats"]],
-           "pad": PAD}
+           "pad": PAD,
+           "context": [filter_spans(t, sps) for t, sps in inputs.get("context", [])]}
     pages = []
     for segs in inputs["pages"]:
         text, ordered, offs = build_ocr_text(segs)
@@ -172,6 +200,7 @@ def build(ocr_files, n_pages=28, seed=7):
                + [[[99.9999, 10.0001, 200.0, 20.5], 827, 1169, 0]],
         "floats": [rng.uniform(0, 1000) for _ in range(200)] + [12.25, 0.125, 2.675, 0.5, 1.5, 2.5, 1003.45, 0.0005],
         "pages": pages,
+        "context": _context_cases(CONTEXT_TEXTS * 6 + texts[:120], rng),
     }
     return {"about": "inputs + Python answers; see tools/make_goldens.py", "inputs": inputs, "expected": compute(inputs)}
 

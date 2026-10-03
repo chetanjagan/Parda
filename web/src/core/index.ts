@@ -1,5 +1,6 @@
 export * from "./audit.js";
 export * from "./boxes.js";
+export * from "./context.js";
 export * from "./labels.js";
 export * from "./predict.js";
 export * from "./pycompat.js";

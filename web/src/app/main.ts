@@ -6,6 +6,8 @@ import { auditOf, pdfOf, pngOf, redactedCanvas, save } from "./export.js";
 import { lib, LIBS } from "./libs.js";
 import { clearModelCache } from "./models.js";
 import { loadFile, type PageImage } from "./pages.js";
+import { filterSpans } from "../core/context.js";
+import { genderSpans } from "./gender.js";
 import { blackouts } from "./pipeline.js";
 import { buildItems, finalRegions, type Group, groupOf, type Item, occurrences, Review } from "./review.js";
 
@@ -16,7 +18,7 @@ const NAMES: Record<string, string> = {
   DOB: "Date of birth", BANK_ACCOUNT: "Bank account", IFSC: "IFSC code", UPI_ID: "UPI ID", GSTIN: "GSTIN",
   VOTER_ID: "Voter ID", PASSPORT: "Passport number", VEHICLE_REG: "Vehicle number", UAN: "UAN", ABHA: "ABHA ID",
   EMPLOYEE_ID: "Employee ID", MRN: "Medical record number", FACE: "Face", SIGNATURE: "Signature", QR_CODE: "QR code",
-  STAMP: "Stamp", MANUAL: "Area you marked",
+  STAMP: "Stamp", MANUAL: "Area you marked", GENDER: "Gender",
 };
 const GROUPS: Array<{ g: Group; title: string; css: string }> = [
   { g: "ids", title: "ID numbers", css: "--hl-ids" }, { g: "people", title: "People", css: "--hl-people" },
@@ -85,14 +87,17 @@ async function run(file: File) {
       const segs = await ocr.run(img.canvas, l);
       const tOcr = (performance.now() - t0) / 1000;
       const res = await analyser.analyse(img.rgba, img.width, img.height, l, easy, segs,
-        { progress, step: (s) => step(tag + s) });
-      const page = { width: img.width, height: img.height, streams: res.streams, items: buildItems(res.streams, res.dets) };
+        { progress, step: (s) => step(tag + s) }, $<HTMLInputElement>("lowpower").checked);
+      const streams = $<HTMLInputElement>("context").checked
+        ? res.streams.map((st) => ({ ...st, spans: filterSpans(st.text, st.spans) })) : res.streams;
+      const page = { width: img.width, height: img.height, streams, items: buildItems(streams, res.dets) };
       d.pages.push({ img, review: new Review(page), timings: { ocr_tesseract: tOcr, ...res.timings } });
       d.device = res.device;
     }
     doc = d;
     current = 0;
     view = "found";
+    if ($<HTMLInputElement>("gender").checked) for (const p of d.pages) p.review.setGender(true, genderSpans);
     show("review");
     render();
   } catch (err) {
@@ -237,11 +242,14 @@ function pagePoint(e: PointerEvent): [number, number] {
   return [((e.clientX - r.left) / r.width) * c.width, ((e.clientY - r.top) / r.height) * c.height];
 }
 let dragFrom: [number, number] | null = null;
+let dragScreen: [number, number] = [0, 0];
+const DRAG_MIN_PX = 12; // on screen: anything smaller is a click, whatever the zoom
 function wirePointer() {
   const c = $<HTMLCanvasElement>("canvas");
-  c.addEventListener("pointerdown", (e) => { dragFrom = pagePoint(e); c.setPointerCapture(e.pointerId); });
+  c.addEventListener("pointerdown", (e) => { dragFrom = pagePoint(e); dragScreen = [e.clientX, e.clientY]; c.setPointerCapture(e.pointerId); });
   c.addEventListener("pointermove", (e) => {
     if (!dragFrom || !doc) return;
+    if (Math.abs(e.clientX - dragScreen[0]) < DRAG_MIN_PX && Math.abs(e.clientY - dragScreen[1]) < DRAG_MIN_PX) return;
     const [x, y] = pagePoint(e);
     draw();
     const ctx = c.getContext("2d")!;
@@ -253,8 +261,7 @@ function wirePointer() {
     const [x, y] = pagePoint(e), [x0, y0] = dragFrom;
     dragFrom = null;
     const review = pageNow().review;
-    const minDrag = c.width / 150;
-    if (Math.abs(x - x0) > minDrag && Math.abs(y - y0) > minDrag) {
+    if (Math.abs(e.clientX - dragScreen[0]) >= DRAG_MIN_PX && Math.abs(e.clientY - dragScreen[1]) >= DRAG_MIN_PX * 0.66) {
       review.addBox([Math.min(x0, x), Math.min(y0, y), Math.max(x0, x), Math.max(y0, y)]);
     } else {
       const hit = review.page.items.filter((it) => boxesOf(it).some(([a, b, cc, d]) => x >= a - 4 && x <= cc + 4 && y >= b - 4 && y <= d + 4))
@@ -309,6 +316,16 @@ function init() {
   $("undo").addEventListener("click", () => { pageNow().review.undo(); render(); });
   $("redo").addEventListener("click", () => { pageNow().review.redo(); render(); });
   $("mask").addEventListener("change", () => render());
+  $("gender").addEventListener("change", () => {
+    if (!doc) return;
+    for (const p of doc.pages) p.review.setGender($<HTMLInputElement>("gender").checked, genderSpans);
+    render();
+  });
+  for (const id of ["easyocr", "context", "lowpower", "gender"]) { // remembered in this browser
+    const el = $<HTMLInputElement>(id);
+    try { el.checked = localStorage.getItem(`parda-${id}`) === "1"; } catch { /* storage off */ }
+    el.addEventListener("change", () => { try { localStorage.setItem(`parda-${id}`, el.checked ? "1" : "0"); } catch { /* storage off */ } });
+  }
   $("savePdf").addEventListener("click", exportPdf);
   $("savePng").addEventListener("click", async () => save(await pngOf(finalCanvas(current)), `${base()}_page${current + 1}_redacted.png`));
   $("saveAudit").addEventListener("click", () => save(auditOf(doc!.name, { language: lang(), photoReader: $<HTMLInputElement>("easyocr").checked,

@@ -85,3 +85,8 @@ test("windowed prediction maps chunk offsets back and merges duplicates", async 
   const at = text.indexOf("w300 ");
   assert.deepEqual(spans, [{ label: "PERSON_NAME", start: at, end: at + 4, score: 0.9 }]);
 });
+
+test("context rules (dates of birth, unspaced Aadhaar, spans cutting numbers) = Python on 150 cases", () => {
+  assert.ok(I.context.length >= 100);
+  I.context.forEach(([t, spans], i) => assert.deepEqual(core.filterSpans(t, spans.map((s) => ({ ...s }))), E.context[i], `case ${i}: ${t.slice(0, 40)}`));
+});

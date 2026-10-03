@@ -48,6 +48,14 @@
         </fieldset>
         <label class="switch"><input type="checkbox" id="easyocr"><span class="track" aria-hidden="true"></span>
           <span>Read phone photos better<small id="easysize"></small></span></label>
+        <details class="more">
+          <summary>More options</summary>
+          <label class="switch"><input type="checkbox" id="context"><span class="track" aria-hidden="true"></span>
+            <span>Fewer false bars on statements and tables<small>Dates count as birth dates only next to a “birth” label,
+              and long reference numbers are not taken for Aadhaar numbers.</small></span></label>
+          <label class="switch"><input type="checkbox" id="lowpower"><span class="track" aria-hidden="true"></span>
+            <span>Use less power<small>Two CPU cores and no graphics chip: cooler and quieter, but slower.</small></span></label>
+        </details>
         <p class="fine">The first time, the app downloads its models (about 580 MB) and keeps them in this browser.
           <button id="clear" type="button" class="linkish">Remove them</button></p>
       </div>
@@ -86,6 +94,8 @@
           <div id="groups"></div>
           <label class="switch small" id="maskrow" hidden><input type="checkbox" id="mask"><span class="track" aria-hidden="true"></span>
             <span>Masked Aadhaar<small>Keep the last 4 digits visible</small></span></label>
+          <label class="switch small"><input type="checkbox" id="gender"><span class="track" aria-hidden="true"></span>
+            <span>Also hide gender<small>Only where it follows a Gender / लिंग / ಲಿಂಗ label</small></span></label>
           <details id="readbox"><summary>What the app read on this page</summary><div id="readtext"></div></details>
           <p class="timing" id="timing"></p>
         </aside>

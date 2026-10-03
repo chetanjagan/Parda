@@ -56,8 +56,12 @@ let siteBase = "";
 /** What this device gets: WebGPU and/or several CPU threads (shown to the user). */
 export const device = { gpu: false, threads: 1 };
 
+let lowPower = false;
+
 /** Call once (in the worker) with the site's address, before any model loads. */
 export function setSiteBase(base: string) { siteBase = base; }
+/** "Use less power": two CPU threads, no graphics chip. Must be set before the first model loads. */
+export function setLowPower(v: boolean) { lowPower = v; }
 
 export function ort(): Promise<Ort> {
   ortPromise ??= (async () => {
@@ -75,9 +79,10 @@ export function ort(): Promise<Ort> {
       o.env.wasm.wasmPaths = LIBS.ortWasm;
     }
     o.env.wasm.proxy = false; // this already runs inside the app's own worker
-    device.threads = local && g.crossOriginIsolated ? Math.max(1, Math.min(8, (g.navigator?.hardwareConcurrency ?? 2) - 1)) : 1;
+    const cores = Math.max(1, Math.min(8, (g.navigator?.hardwareConcurrency ?? 2) - 1));
+    device.threads = local && g.crossOriginIsolated ? (lowPower ? Math.min(2, cores) : cores) : 1;
     o.env.wasm.numThreads = device.threads;
-    device.gpu = !!g.navigator?.gpu;
+    device.gpu = !!g.navigator?.gpu && !lowPower;
     return o;
   })();
   return ortPromise;

@@ -27,13 +27,17 @@ export class Analyser {
     return w;
   }
 
+  private lowPower: boolean | null = null;
+
   analyse(rgba: Uint8ClampedArray, width: number, height: number, lang: string, easyocr: boolean, tesseract: Segment[],
-    cb: Callbacks = {}): Promise<AnalyseResult> {
+    cb: Callbacks = {}, lowPower = false): Promise<AnalyseResult> {
+    if (this.lowPower !== null && this.lowPower !== lowPower) this.cancel(); // the setting applies when models load
+    this.lowPower = lowPower;
     const id = ++this.seq;
     const copy = rgba.slice(); // the page keeps its own pixels
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject, cb });
-      this.worker.postMessage({ type: "analyse", id, rgba: copy.buffer, width, height, lang, easyocr, tesseract,
+      this.worker.postMessage({ type: "analyse", id, rgba: copy.buffer, width, height, lang, easyocr, tesseract, lowPower,
         base: new URL("./", document.baseURI).href }, [copy.buffer]);
     });
   }
